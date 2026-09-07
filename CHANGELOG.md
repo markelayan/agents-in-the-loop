@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.7.2 (2026-09-07)
+
+- Fix cross-session delivery to dead targets: `agents.resume()` on dsh
+  0.1.2 expects `{ resumeSessionId }` (delegated to the agent-loop factory →
+  `persistence.prepare(id)`); the plugin passed the pre-0.1.2 `{ sessionId }`
+  shape, so `resumeSessionId` was undefined and every resumeIfDead wake died
+  with "Cannot read properties of undefined (reading 'length')". All three
+  call sites (dshCallback wake, session_message/contacts delivery, executor
+  relay) now send `resumeSessionId`.
+
 ## v0.7.1 (2026-09-07)
 
 **Restart-storm fix** — restarting the plugin (or dsh) no longer re-arms every
