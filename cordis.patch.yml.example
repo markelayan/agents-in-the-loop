@@ -27,6 +27,21 @@
         executeUrl: 'http://127.0.0.1:9001/dsh-taskboard'  # local dsh web run API (default)
         defaultEnabled: false  # boards WITHOUT an entry below are untouched
 
+        # v0.7.1 restart-storm knobs:
+        #   bootDrain — what happens to todo (execute) cards at boot:
+        #     'fresh' (default) drain only cards enqueued while the plugin
+        #                was down AND with a clean execution history
+        #     'off'    never dispatch at boot (cards wait for explicit Run)
+        #     'all'    legacy v0.4.2: drain every todo card (hazard: stale
+        #                and rejected cards re-spawn on every restart)
+        #   state.file — persistent dispatch state (default
+        #     ~/.dsh/taskboard-flow-state.json). Delete it to force a full
+        #     re-baseline on next start (everything seeds as already-fired
+        #     under bootDrain 'fresh').
+        bootDrain: fresh
+        state:
+          file: '~/.dsh/taskboard-flow-state.json'
+
         # v0.6.0: kill-switch for the session_message model tool
         # (cross-session messaging). Default ON.
         sessionMessage:

@@ -1,5 +1,27 @@
 # Changelog
 
+## v0.7.1 (2026-09-07)
+
+**Restart-storm fix** — restarting the plugin (or dsh) no longer re-arms every
+dispatch rule:
+
+- **Persistent dispatch state** (`~/.dsh/taskboard-flow-state.json`, override
+  via `state.file`): `spawnedTasks`, `callbackFired`, `processedCallbacks`
+  (capped at 500) and `seenCommentCounts` survive restarts via a debounced
+  atomic write, flushed on dispose. Previously ALL dedupe keys were in-memory
+  closure state, so every restart looked like a fresh world.
+- **`bootDrain` policy for execute (todo) columns** — replaces the v0.4.2
+  unconditional "drain at boot": `fresh` (new default) drains only cards
+  enqueued while the plugin was down (`updatedAt > lastPollAt`) with a clean
+  execution history; `off` drains nothing; `all` restores legacy behavior.
+  The old rule re-executed every stale/queued todo card on EVERY restart.
+- **Failed/rejected guard**: a card whose most recent execution ended
+  `failed` or `cancelled` (quick-reject) is never auto-executed again —
+  the old transition-reset rule re-fired rejected cards on the next poll,
+  overriding the human's reject. Explicit re-queue (UI Run / orchestrator
+  run tool) still works; `succeeded`/no-run cards re-plan as before.
+- State file is pruned on write (keys of deleted/terminal tasks dropped).
+
 ## v0.7.0 (2026-09-01)
 
 - New `contacts` tool: a named contact directory over raw session ids.
