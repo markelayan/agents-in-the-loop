@@ -164,7 +164,9 @@ contacts { action: "list" }
 
 contacts { action: "get", name }
 contacts { action: "call", name, message, wake?, resumeIfDead? }   // via the session_message engine
-contacts { action: "add", name, sessionId, label?, tags?, note? }
+contacts { action: "add", name, sessionId?, label?, tags?, note? }
+// v0.7.3: omit sessionId → registers YOUR calling session automatically
+// (agents self-register by name only); pass one to register another session.
 contacts { action: "update", name, sessionId?, label?, tags?, note?, rename? }
 contacts { action: "remove", name }
 ```

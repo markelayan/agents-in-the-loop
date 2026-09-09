@@ -95,13 +95,17 @@ contacts { "action": "list" }
 contacts { "action": "get",  "name": "advisor" }   → one contact + live status
 contacts { "action": "call", "name": "advisor", "message": "…" }
                                                    → sends via the session_message engine
-contacts { "action": "add",    "name": "reviewer", "sessionId": "session-…", "label": "…" }
+contacts { "action": "add",    "name": "reviewer", "label": "…" }   // sessionId omitted → registers YOUR session (v0.7.3)
+contacts { "action": "add",    "name": "reviewer", "sessionId": "session-…", "label": "…" }  // register a DIFFERENT session
 contacts { "action": "update", "name": "reviewer", "sessionId": "session-…" }  // "rename": renames the alias
 contacts { "action": "remove", "name": "reviewer" }
 ```
 
 - `call` accepts the same `wake` / `resumeIfDead` knobs as
   `session_message send` and returns the same delivery fields.
+- Self-registration needs the NAME ONLY: `add` with no `sessionId`
+  registers the calling session automatically — never research your own
+  session id first (v0.7.3+).
 - Entries live in a local JSON store
   (`~/.dsh/taskboard-flow-contacts.json` by default): personal state,
   add/edit/delete at runtime, no config edit or restart. Kill-switch:

@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.7.3 (2026-09-09)
+
+- `contacts add` no longer requires a `sessionId`: omitted (or the literal
+  `"self"`) registers the CALLING session automatically — agents
+  self-register by name only, instead of researching their own session id
+  first (slow: list-then-guess or tool-cordis inspection). An explicit
+  `sessionId` still registers a contact pointing at a different session.
+  The tool description, `sessionId` param description, SKILL.md, and README
+  now document the name-only flow; self-registrations log with `(self)` and
+  return `selfRegistered: true`.
+
 ## v0.7.2 (2026-09-07)
 
 - Fix cross-session delivery to dead targets: `agents.resume()` on dsh
