@@ -1,5 +1,27 @@
 # Changelog
 
+## v1.0.0 (2026-09-10)
+
+**PIVOT: taskboard-flow → agents-in-the-loop.** The board/trigger/triage
+engine is GONE (user decision 2026-09-10): no ledger polling, no column
+spawns, no triage/executor dispatch, no dshCallback/review wakes, no
+`taskboard_done`, no Telegram bridge, no dispatch state file. What remains
+is the cross-session call center, preserved verbatim from v0.7.3:
+
+- `session_message` — list live sessions; deliver to another session
+  (idle: visible full-text wake via steer/followup; busy: mid-turn-safe
+  plugin notice; both + runtime-context note, 30-min TTL, cap 5;
+  `resumeIfDead` opt-in via `agents.resume({ resumeSessionId })`).
+- `contacts` — named directory (list/get/call/add/update/remove) over
+  `~/.dsh/taskboard-flow-contacts.json` (historical path kept so existing
+  contacts survive the rename). Name-only self-registration (v0.7.3):
+  `add` without `sessionId` registers the calling session.
+
+Config shrinks to `enabled` + `sessionMessage.enabled` + `contacts.enabled`
+(+ optional `contacts.file`). `inject` is now empty (webServer no longer
+required). 1880 → 519 lines. The old `taskboard-flow-state.json` is never
+read and can be deleted. Package renamed `agents-in-the-loop` @ 1.0.0.
+
 ## v0.7.3 (2026-09-09)
 
 - `contacts add` no longer requires a `sessionId`: omitted (or the literal

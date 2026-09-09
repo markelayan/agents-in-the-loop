@@ -1,7 +1,7 @@
 {
-  "name": "taskboard-flow",
-  "version": "0.7.3",
-  "description": "DSH plugin: multi-project kanban flow engine + cross-session messaging. Watches dsh-taskboard ledgers, spawns triage/executor agent sessions on card transitions, wakes creators on review, relays @orchestrator escalation, and provides the session_message + contacts model tools for session-to-session messaging. Config is file-based (cordis composition) — no web UI.",
+  "name": "agents-in-the-loop",
+  "version": "1.0.0",
+  "description": "DSH plugin: cross-session call center for agents. session_message delivers messages between DSH sessions (idle: visible full-text wake; busy: mid-turn-safe notice; plus runtime-context notes) and contacts is a named directory over session ids — resolve/call/manage contacts by alias, self-register by name only. Formerly taskboard-flow (board triggers/triage/task engine removed in v1.0.0). Config is file-based (cordis composition) — no web UI.",
   "type": "module",
   "main": "lib/index.js",
   "exports": {
@@ -20,20 +20,19 @@
   "dependencies": {},
   "repository": {
     "type": "git",
-    "url": "https://github.com/markelayan/dsh-taskboard-flow.git"
+    "url": "https://github.com/markelayan/agents-in-the-loop.git"
   },
-  "homepage": "https://github.com/markelayan/dsh-taskboard-flow#readme",
+  "homepage": "https://github.com/markelayan/agents-in-the-loop#readme",
   "bugs": "https://github.com/markelayan/dsh-taskboard-flow/issues",
   "keywords": [
     "dsh",
     "dsh-plugin",
     "deepseek-harness",
-    "taskboard",
-    "kanban",
-    "event-driven",
-    "triage",
-    "agent-orchestration",
-    "session-messaging"
+    "agents",
+    "multi-agent",
+    "session-messaging",
+    "contacts",
+    "call-center"
   ],
   "dsh": {
     "bundle": {
