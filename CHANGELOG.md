@@ -1,5 +1,31 @@
 # Changelog
 
+## v1.1.2 (2026-09-11)
+
+**FIX: `{{model}}` has no value on resumeIfDead.** `deliverSessionMessage`
+resumed dead targets via `agents.resume({ resumeSessionId })` with no
+`agentOptions`, so the resurrected agent had `options.model` undefined while
+dsh-agent-loop defines the `model` prompt variable as
+`context.agent?.options.model` — every wake turn failed with
+`prompt variable "{{model}}" has no value for this assembly (section
+"deployment:persona")`. The resume now passes the deployment default
+selection read from `agentDefaultModel.currentSelection()` (same fallback
+taskboard-flow v0.7.x used). Requires dsh web restart.
+
+
+## v1.1.1 (2026-09-11)
+
+**FIX: prompt-variable poisoning.** The harness system-prompt interpolator
+(dsh-system-prompt, GROUP_AT) scans ALL context text and throws `malformed
+prompt variable reference` on any `{{...}}` whose name is not a valid
+variable. A forwarded session_message payload containing the literal `{{}}`
+(or a template snippet like `{{lastExecution}}`) poisoned the target
+session's system prompt on every model step until the 30-min note TTL
+cleared. `pushContextNote` now sanitizes note text: every `{{` is broken to
+`{ {` before buffering, so forwarded prose can never form a variable
+reference. Requires a dsh web restart to take effect.
+
+
 ## v1.0.0 (2026-09-10)
 
 **PIVOT: taskboard-flow → agents-in-the-loop.** The board/trigger/triage

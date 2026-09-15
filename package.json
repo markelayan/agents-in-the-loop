@@ -1,42 +1,41 @@
 {
-  "name": "agents-in-the-loop",
-  "version": "1.0.0",
-  "description": "DSH plugin: cross-session call center for agents. session_message delivers messages between DSH sessions (idle: visible full-text wake; busy: mid-turn-safe notice; plus runtime-context notes) and contacts is a named directory over session ids — resolve/call/manage contacts by alias, self-register by name only. Formerly taskboard-flow (board triggers/triage/task engine removed in v1.0.0). Config is file-based (cordis composition) — no web UI.",
-  "type": "module",
-  "main": "lib/index.js",
-  "exports": {
-    ".": "./lib/index.js",
-    "./package.json": "./package.json"
-  },
-  "files": [
-    "lib/**/*.js",
-    "cordis.patch.yml.example",
-    "SKILL.md",
-    "README.md",
-    "CHANGELOG.md",
-    "LICENSE"
-  ],
-  "license": "MIT",
-  "dependencies": {},
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/markelayan/agents-in-the-loop.git"
-  },
-  "homepage": "https://github.com/markelayan/agents-in-the-loop#readme",
-  "bugs": "https://github.com/markelayan/dsh-taskboard-flow/issues",
-  "keywords": [
-    "dsh",
-    "dsh-plugin",
-    "deepseek-harness",
-    "agents",
-    "multi-agent",
-    "session-messaging",
-    "contacts",
-    "call-center"
-  ],
-  "dsh": {
-    "bundle": {
-      "patch": "./cordis.patch.yml"
+    "name": "agents-in-the-loop",
+    "version": "1.3.0",
+    "description": "DSH plugin: cross-session call center for agents. session_message delivers messages between DSH sessions (idle: visible full-text wake; busy: mid-turn-safe notice; plus runtime-context notes) and contacts is a named directory over session ids. UI intentionally removed in v1.3.0.",
+    "type": "module",
+    "main": "lib/index.js",
+    "exports": {
+        ".": "./lib/index.js",
+        "./package.json": "./package.json"
+    },
+    "files": [
+        "lib/**/*.js",
+        "SKILL.md",
+        "README.md",
+        "CHANGELOG.md",
+        "LICENSE"
+    ],
+    "license": "MIT",
+    "dependencies": {},
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/markelayan/agents-in-the-loop.git"
+    },
+    "homepage": "https://github.com/markelayan/agents-in-the-loop#readme",
+    "bugs": "https://github.com/markelayan/dsh-taskboard-flow/issues",
+    "keywords": [
+        "dsh",
+        "dsh-plugin",
+        "deepseek-harness",
+        "agents",
+        "multi-agent",
+        "session-messaging",
+        "contacts",
+        "call-center"
+    ],
+    "dsh": {
+        "bundle": {
+            "patch": "./cordis.patch.yml"
+        }
     }
-  }
 }
