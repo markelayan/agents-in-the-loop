@@ -1,5 +1,27 @@
 # Changelog
 
+## v1.3.1 (2026-09-18)
+
+**Target-by-name in `session_message` (stale-id-proof cross-session calls).**
+`send` now accepts the REGISTERED CONTACT NAME as `target`: any value not
+matching `/^session-/` is resolved against the live contacts store at CALL
+TIME, so a re-raised agent re-registered under the same name is always
+reached — raw session ids cached in a peer's context go stale the moment an
+agent is re-created. Raw `session-…` ids still work verbatim (legacy).
+`list` now annotates each live session with its registered `contact` name
+(sid→name map), so models naturally address peers by name; successful sends
+report `resolvedFrom: <contact>` and the log line names the contact. Tool
+description + `target` parameter documentation updated to mark the name as
+PREFERRED. `contacts call` was already name-based and is unchanged.
+Requires a dsh web restart.
+
+
+## v1.3.0 (2026-09-17)
+
+**UI removed.** The web UI surface was dropped entirely — this plugin is
+now exactly two model tools (`session_message` + `contacts`) over the file
+contacts store. No behavior change to the delivery engine.
+
 ## v1.1.2 (2026-09-11)
 
 **FIX: `{{model}}` has no value on resumeIfDead.** `deliverSessionMessage`

@@ -15,6 +15,12 @@ no background polling — the plugin is inert until an agent calls a tool.
 
 - **`session_message`** — list live sessions; send a message to another
   session. Delivery rules (battle-tested, preserved):
+  - **Target by NAME, not id (v1.3.1)**: `send` accepts the REGISTERED
+    CONTACT NAME as `target` — resolved against the live contacts store at
+    call time, so a re-raised agent re-registered under the same name is
+    always reached and stale session ids never bite. Raw `session-…` ids
+    still work verbatim. Successful sends report `resolvedFrom: <contact>`;
+    `list` annotates each live session with its registered `contact` name.
   - **Idle target + wake** (default): the FULL message text is rendered into
     the target conversation (steer, followup fallback) AND pushed into its
     runtime context (~30-min TTL). Main GUI sessions start a turn only on
