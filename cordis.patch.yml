@@ -1,0 +1,18 @@
+# dsh-agents-in-the-loop — live configuration (npm name; repo keeps agents-in-the-loop)
+# Cross-session call center: session_message + contacts.
+# UI intentionally removed in v1.3.0 (host functionality only).
+# Contacts store keeps the historical path so pre-rename contacts survive:
+# ~/.dsh/taskboard-flow-contacts.json
+# SECURITY: gitignored — local session ids, never commit.
+
+- insert:
+    - id: dsh-agents-in-the-loop
+      name: dsh-agents-in-the-loop
+      disabled: false
+      config:
+        enabled: true
+        sessionMessage:
+          enabled: true
+        contacts:
+          enabled: true
+          file: '~/.dsh/taskboard-flow-contacts.json'
