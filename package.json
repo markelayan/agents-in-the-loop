@@ -1,6 +1,6 @@
 {
     "name": "dsh-agents-in-the-loop",
-    "version": "1.4.1",
+    "version": "1.4.2",
     "description": "DSH plugin: cross-session call center for agents. session_message delivers messages between DSH sessions (idle: visible full-text wake; busy: mid-turn-safe notice; plus runtime-context notes) and resolves targets by registered contact name (stale-id-proof). contacts is a named directory over session ids.",
     "type": "module",
     "main": "lib/index.js",

@@ -1,5 +1,13 @@
 # Changelog
 
+## v1.4.2 (2026-09-18)
+
+**Raw session-id targeting DISABLED (user directive).** `session_message`
+now accepts only registered contact names as `target`; a raw `session-…`
+id is rejected with a clean error pointing at `session_message`/`contacts`
+action "list". Rationale: raw ids go stale on re-raise and bypass the named
+directory. Tool + param descriptions updated accordingly. No other change.
+
 ## v1.4.1 (2026-09-18)
 
 **npm rename + first npm publish.** Package renamed
