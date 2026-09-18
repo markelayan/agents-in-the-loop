@@ -1,5 +1,16 @@
 # Changelog
 
+## v1.4.0 (2026-09-18)
+
+**DSH version compatibility declared.** `package.json` now carries
+`engines` (node >=20, @deepseek-ai/dsh >=0.1.2) and an OPTIONAL
+`peerDependencies` entry for `@deepseek-ai/dsh >=0.1.2` — the hard floor is
+the `agents.resume({ resumeSessionId })` API introduced in dsh 0.1.2 (see
+v0.7.2). README gains a Compatibility section (floor, verified range 0.1.2
+→ 0.1.6-alpha.1, and the note that the dsh plugin loader does not enforce
+these fields today — they are the machine-readable contract). Description
+updated to mention name-based target resolution. No behavior change.
+
 ## v1.3.1 (2026-09-18)
 
 **Target-by-name in `session_message` (stale-id-proof cross-session calls).**

@@ -8,6 +8,19 @@ directory over session ids so agents reach each other by alias in one call.
 Formerly **taskboard-flow** — the kanban trigger/triage/task engine was
 removed in v1.0.0; the messaging core is preserved verbatim.
 
+## Compatibility
+
+- **DSH `>=0.1.2`** (hard floor): v0.7.2+ relies on
+  `agents.resume({ resumeSessionId })`, which dsh 0.1.2 introduced. Declared
+  in `package.json` via `engines` + optional `peerDependencies` (the dsh
+  plugin loader does not enforce these fields today — they are the
+  machine-readable contract for installers and humans; npm may warn about
+  the nonstandard `@deepseek-ai/dsh` engines key, which is advisory).
+- **Verified against**: dsh 0.1.2 through 0.1.6-alpha.1 (tools service
+  `register()`, `workspaceRegistry`/`agents` inject, `agent/created` /
+  `agent/disposed` events, runtime-context notes).
+- **Node `>=20`**.
+
 Config is **file-based** (a cordis composition patch). No web UI, no database,
 no background polling — the plugin is inert until an agent calls a tool.
 
