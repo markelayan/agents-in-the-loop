@@ -1,6 +1,6 @@
 {
-    "name": "agents-in-the-loop",
-    "version": "1.4.0",
+    "name": "dsh-agents-in-the-loop",
+    "version": "1.4.1",
     "description": "DSH plugin: cross-session call center for agents. session_message delivers messages between DSH sessions (idle: visible full-text wake; busy: mid-turn-safe notice; plus runtime-context notes) and resolves targets by registered contact name (stale-id-proof). contacts is a named directory over session ids.",
     "type": "module",
     "main": "lib/index.js",
@@ -22,7 +22,10 @@
         "url": "https://github.com/markelayan/agents-in-the-loop.git"
     },
     "homepage": "https://github.com/markelayan/agents-in-the-loop#readme",
-    "bugs": "https://github.com/markelayan/dsh-taskboard-flow/issues",
+    "bugs": {
+        "type": "git",
+        "url": "https://github.com/markelayan/agents-in-the-loop/issues"
+    },
     "keywords": [
         "dsh",
         "dsh-plugin",
@@ -49,5 +52,8 @@
         "@deepseek-ai/dsh": {
             "optional": true
         }
+    },
+    "publishConfig": {
+        "access": "public"
     }
 }

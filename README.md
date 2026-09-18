@@ -1,4 +1,4 @@
-# agents-in-the-loop
+# dsh-agents-in-the-loop (npm)
 
 **Cross-session call center for [DeepSeek Harness (DSH)](https://github.com/deepseek-ai)
 agents.** Two model tools, nothing else: `session_message` delivers messages
@@ -56,7 +56,7 @@ no background polling — the plugin is inert until an agent calls a tool.
 ## Install
 
 ```bash
-dsh plugin --profile web add link:/path/to/agents-in-the-loop
+dsh plugin --profile web add link:/path/to/agents-in-the-loop   # or: pnpm add dsh-agents-in-the-loop (npm)
 cp cordis.patch.yml.example cordis.patch.yml   # then edit
 ```
 
@@ -68,8 +68,8 @@ One row (see `cordis.patch.yml.example`):
 
 ```yaml
 - insert:
-    - id: agents-in-the-loop
-      name: agents-in-the-loop
+    - id: dsh-agents-in-the-loop
+      name: dsh-agents-in-the-loop
       config:
         enabled: true
         sessionMessage:

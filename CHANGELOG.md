@@ -1,5 +1,16 @@
 # Changelog
 
+## v1.4.1 (2026-09-18)
+
+**npm rename + first npm publish.** Package renamed
+`agents-in-the-loop` → **`dsh-agents-in-the-loop`** (npm name; the GitHub
+repo keeps `agents-in-the-loop`) and published to npm as
+`dsh-agents-in-the-loop@1.4.1` (public access). Plugin row id in
+`cordis.patch.yml` + README examples follow the new name; the composition
+row id is the only breaking change for existing installs (update the
+`- id:` in your profile patch, or reinstall). `bugs` URL fixed to point at
+this repo (was the old dsh-taskboard-flow repo). No behavior change.
+
 ## v1.4.0 (2026-09-18)
 
 **DSH version compatibility declared.** `package.json` now carries
