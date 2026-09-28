@@ -1,4 +1,4 @@
-# dsh-agents-in-the-loop (npm)
+# dsh-agents-in-the-loop
 
 > **Disclaimer:** this plugin was fully and automagically coded by
 > **GLM 5.3 Flash** (Z.ai) running inside the DeepSeek Harness agent
@@ -6,90 +6,105 @@
 > owns every decision; the model does the typing. :D
 
 **Cross-session call center for [DeepSeek Harness (DSH)](https://github.com/deepseek-ai)
-agents.** Two model tools, nothing else: `session_message` delivers messages
-between ANY two sessions on the dsh instance, and `contacts` is a named
-directory over session ids so agents reach each other by alias in one call.
+agents.** Two model tools — `session_message` and `contacts` — plus a
+loopback-only HTTP API so agents OUTSIDE dsh (Claude Code, scripts) can
+send messages to registered contacts, and so a client panel can read and
+manage the contact directory.
 
 Formerly **taskboard-flow** — the kanban trigger/triage/task engine was
-removed in v1.0.0; the messaging core is preserved verbatim.
+removed in v1.0.0 (and the web UI in v1.3.0); the messaging core is
+preserved verbatim.
 
-## Permissions, external services & failure bounds
+## Features at a glance
 
-Disclosed capability surface (this plugin is intentionally privileged):
+- **`session_message`** — list live sessions; deliver a message to any
+  registered contact (by NAME — raw session ids are rejected since v1.4.2).
+- **`contacts`** — a named directory over session ids: resolve an alias to
+  session id + label + LIVE status in one call, message it, manage entries
+  at runtime (add / update / rename / remove, no config edit, no restart).
+- **External send-only HTTP API** (v1.5.0) — `POST
+  /api/agents-in-the-loop/message`: loopback curl from any outside agent.
+  Externals never register, never receive, never resurrect sessions.
+- **Contacts HTTP API** — `GET/POST/PUT/DELETE
+  /api/agents-in-the-loop/contacts` + `GET /sessions` for a client panel.
+- **State-aware delivery engine** (shared by all three paths): idle target
+  gets the full text rendered visibly into its conversation + a
+  runtime-context note; busy target gets a mid-turn-safe visible notice +
+  the note; optional `resumeIfDead` resurrects dead sessions.
 
-- **Filesystem**: reads and writes exactly ONE file — the contacts store at
-  `~/.dsh/taskboard-flow-contacts.json` (atomic tmp+rename writes; path
-  configurable via `config.contacts.file`). No other filesystem access.
-- **Network**: registers loopback HTTP routes on the dsh web server
-  (`127.0.0.1:9001`, fence rejects non-loopback peers). The
-  external send-only API accepts inbound loopback POSTs; no outbound
-  network calls are ever made.
-- **Process**: no subprocess/shell execution, no child processes.
-- **Credentials**: none read, stored, or transmitted. No secrets.
-- **External services**: none. Zero runtime dependencies, zero
-  lifecycle scripts (`preinstall`/`install`/`postinstall`/`prepare`).
-- **Failure bounds**: if the dsh core APIs the plugin injects into change
-  shape, the plugin logs an install/delivery failure and degrades to
-  inert — it never blocks session composition or other plugins. The
-  external message route refuses (409) rather than resurrecting dead
-  sessions, so it can never start work on its own.
+## How delivery works
 
-## Compatibility
+All sends (tools and HTTP) go through one delivery engine:
 
-- **DSH `>=0.1.2`** (hard floor): v0.7.2+ relies on
-  `agents.resume({ resumeSessionId })`, which dsh 0.1.2 introduced. Declared
-  in `package.json` via `engines` + optional `peerDependencies` (the dsh
-  plugin loader does not enforce these fields today — they are the
-  machine-readable contract for installers and humans; npm may warn about
-  the nonstandard `@deepseek-ai/dsh` engines key, which is advisory).
-- **Verified against**: dsh 0.1.2 through 0.1.7-rc.2 (tools service
-  `register()`, `workspaceRegistry`/`agents` inject, `agent/created` /
-  `agent/disposed` events, runtime-context notes, webServer routes).
-- **Node `>=20`**.
+| Target state | What happens | Result fields |
+|---|---|---|
+| **idle** + wake | full text rendered into the target conversation (steer, fallback followup) **and** pushed into its runtime context | `delivery: context+wake-steer` (or `-followup`), `nudgeVia` |
+| **busy** + wake | full text injected as a visible plugin-source notice — renders immediately, mid-turn safe, starts no turn — plus the context note | `delivery: context+notice`, `noticeInjected: true` |
+| wake disabled | runtime-context note only | `delivery: context-only` |
 
-Config is **file-based** (a cordis composition patch). No web UI, no database,
-no background polling — the plugin is inert until an agent calls a tool.
+Harness physics: main GUI sessions start turns on user input, so an idle
+wake renders the message but does not force a turn — the agent reads it at
+its next turn via conversation history + the runtime-context note.
 
-## What it gives your agents
+**Runtime-context notes** are delivered through a per-session
+`systemPrompt.context()` registration and appear in the agent's "Current
+runtime context" snapshot. Notes expire after **30 minutes**, are capped at
+**5 per session**, and any `{{` in forwarded text is broken to `{ {` so
+messages can never poison the system-prompt template interpolator.
 
-- **External send-only HTTP API (v1.5.0)** — agents OUTSIDE dsh (Claude
-  Code, scripts) can message registered contacts over loopback HTTP:
-  `POST /api/agents-in-the-loop/message`. See
-  [External agents](#external-agents-send-only-http-api). They never
-  register, never receive, and can never resurrect a dead session.
-- **`session_message`** — list live sessions; send a message to another
-  session. Delivery rules (battle-tested, preserved):
-  - **Target by NAME, not id (v1.3.1)**: `send` accepts the REGISTERED
-    CONTACT NAME as `target` — resolved against the live contacts store at
-    call time, so a re-raised agent re-registered under the same name is
-    always reached and stale session ids never bite. Raw `session-…` ids
-    still work verbatim. Successful sends report `resolvedFrom: <contact>`;
-    `list` annotates each live session with its registered `contact` name.
-  - **Idle target + wake** (default): the FULL message text is rendered into
-    the target conversation (steer, followup fallback) AND pushed into its
-    runtime context (~30-min TTL). Main GUI sessions start a turn only on
-    user input — the text is visible the moment anyone opens the session.
-  - **Busy target + wake**: the full text is injected as a plugin-source
-    notice — visible immediately, mid-turn safe, starts no turn — plus the
-    runtime-context note.
-  - `resumeIfDead: true` resurrects a dead target first (opt-in).
-  - Self-send is refused.
-- **`contacts`** — a named directory over raw session ids (`list` / `get` /
-  `call` / `add` / `update` / `remove`):
-  - Resolve "advisor" → session id + label + **live status** in ONE call
-    (no `session_message list` + guessing).
-  - `call` messages the contact through the same delivery engine.
-  - **Self-registration needs the NAME ONLY**: `add` with no `sessionId`
-    registers the calling session automatically (v1.0.0 carries the
-    taskboard-flow v0.7.3 behavior) — never research your own session id.
-  - Names: lowercase `[a-z0-9._-]`, ≤64 chars.
+**`resumeIfDead: true`** (opt-in) resurrects a dead target via
+`AgentRegistry.resume` before delivering; the resumed agent gets the
+deployment-default model selection (a resumed agent must carry a model
+route or its wake turn fails on the `{{model}}` prompt variable). Self-send
+is always refused. Status is read exactly once per send (mid-send
+idle→busy flips previously produced contradictory results).
+
+**Targeting law (v1.4.2):** `session_message send` accepts ONLY a
+registered contact name as `target` — resolved against the live contacts
+store at call time, so a re-raised agent re-registered under the same name
+is always reached. A raw `session-…` id is rejected with an error pointing
+at `session_message`/`contacts` action `"list"`. `contacts call` is and
+always was name-based.
+
+## The `session_message` tool
+
+```
+session_message { action: "list" }                     → live sessions [{id,status,contact?}]
+session_message { action: "send", target, message,     → deliver
+                  wake?, resumeIfDead? }
+```
+
+- `target` — registered contact name (required for send).
+- `list` annotates each live session with its registered `contact` name;
+  successful sends report `resolvedFrom: <contact>`.
+- `wake` defaults to true; `resumeIfDead` defaults to false.
+
+## The `contacts` tool
+
+```
+contacts { action: "list" }                                → every contact + live status + store file
+contacts { action: "get", name }                           → one contact + status
+contacts { action: "call", name, message, wake?, resumeIfDead? } → message via the delivery engine
+contacts { action: "add", name, sessionId?, label?, tags?, note? }
+contacts { action: "update", name, sessionId?, label?, tags?, note?, rename? }
+contacts { action: "remove", name }
+```
+
+- **Self-registration needs the NAME ONLY**: `add` with no `sessionId`
+  (or `"self"`) registers the CALLING session automatically — never
+  research your own session id. An explicit id registers another session.
+- Names: lowercase `[a-z0-9._-]`, ≤64 chars.
+- `add` on a not-currently-live session still saves the contact and
+  returns a `warn` — `resumeIfDead` can reach it later.
+- Records carry `label`, `tags`, `note`, `createdAt`, `updatedAt`, and a
+  computed live `status` (`idle` / `running` / … / `dead`).
 
 ## External agents (send-only HTTP API)
 
 Agents outside dsh (Claude Code, scripts) can **send** messages to any
-registered contact over loopback HTTP. They never register, never appear in
-the contacts store, and never receive messages. Dead sessions are never
-resurrected by this route.
+registered contact over loopback HTTP. They never register, never appear
+in the contacts store, and never receive messages. `resumeIfDead` is
+hard-wired `false`: a dead session is refused (409), never resurrected.
 
 ```bash
 curl -s http://127.0.0.1:9001/api/agents-in-the-loop/message \
@@ -97,25 +112,44 @@ curl -s http://127.0.0.1:9001/api/agents-in-the-loop/message \
   -d '{"from":"claude-code","contact":"dev-lead","message":"task done"}'
 ```
 
-- `from` — free-form sender label (default `external-agent`), shown as
-  `From <from>:` in the target conversation.
-- Delivery is identical to the `session_message` tool: idle target gets the
-  full text rendered visibly + runtime-context note; busy target gets a
-  mid-turn-safe notice.
-- Loopback-only (`127.0.0.1`); anything else gets 403.
+- `from` — free-form sender label (default `external-agent`, truncated to
+  64 chars), shown as `From <from>:` in the target conversation.
+- Delivery is identical to the `session_message` tool.
+
+| Status | Meaning |
+|---|---|
+| 200 | delivered — `{ok, contact, from, nudgeVia, noticeInjected}` |
+| 400 | invalid JSON / invalid contact name / empty message |
+| 403 | not loopback (`forbidden: loopback-only`) |
+| 404 | unknown contact |
+| 405 | method not allowed (POST only) |
+| 409 | delivery refused (e.g. target session dead) |
+
+## Contacts panel HTTP API
+
+Same loopback fence, same JSON conventions:
+
+- `GET /api/agents-in-the-loop/sessions` — live sessions `[{id,status}]`.
+- `GET /api/agents-in-the-loop/contacts` — every contact + live status.
+- `POST …/contacts` — create; body `{name, sessionId, label?, tags?, note?}`.
+- `PUT …/contacts` — update; body `{name, sessionId?, label?, tags?, note?, rename?}`.
+- `DELETE …/contacts?name=<name>` — remove.
+
+Errors: 400 invalid input, 404 unknown contact, 405 wrong method,
+409 name/rename collision, 500 persist failure.
 
 ## Install
 
 ```bash
-dsh plugin --profile web add link:/path/to/agents-in-the-loop   # or: pnpm add dsh-agents-in-the-loop (npm)
-cp cordis.patch.yml.example cordis.patch.yml   # then edit
+dsh plugin --profile web add link:/path/to/agents-in-the-loop   # or: npm i dsh-agents-in-the-loop
 ```
 
-Restart `dsh web` afterwards. The tools appear for every session.
+Then add the plugin row to your profile's cordis composition patch (see
+`cordis.patch.yml` in this repo for the shape) and **restart `dsh web`**.
 
 ## Configuration
 
-One row (see `cordis.patch.yml.example`):
+One row (all keys optional, defaults shown):
 
 ```yaml
 - insert:
@@ -132,19 +166,54 @@ One row (see `cordis.patch.yml.example`):
 
 The contacts store defaults to `~/.dsh/taskboard-flow-contacts.json` — the
 historical taskboard-flow path, so contacts created before the rename keep
-working. Atomic tmp+rename writes; personal state, never shipped.
+working. Atomic tmp+rename writes; personal state, never shipped. A `~/`
+prefix in a custom path expands. Contact CRUD via the HTTP API and the
+`contacts` tool write the same store — no config edit or restart needed
+for directory changes.
+
+## Permissions, external services & failure bounds
+
+Disclosed capability surface (this plugin is intentionally privileged):
+
+- **Filesystem**: reads and writes exactly ONE file — the contacts store
+  above. No other filesystem access.
+- **Network**: registers loopback HTTP routes on the dsh web server
+  (`127.0.0.1:9001`, custom fence rejects non-loopback peers with 403).
+  The external send-only API accepts inbound loopback POSTs; no outbound
+  network calls are ever made.
+- **Process**: no subprocess/shell execution, no child processes.
+- **Credentials**: none read, stored, or transmitted. No secrets.
+- **External services**: none. Zero runtime dependencies, zero lifecycle
+  scripts (`preinstall`/`install`/`postinstall`/`prepare`).
+- **Audit trail**: action logs go to `console.log` (dsh's `ctx.logger`
+  output never reaches `~/.dsh/dsh-web.log` — verified 2026-08-28).
+- **Failure bounds**: if the dsh core APIs the plugin injects into change
+  shape, the plugin logs the failure and degrades to inert — it never
+  blocks session composition or other plugins. The external message route
+  refuses (409) rather than resurrecting dead sessions.
+
+## Compatibility
+
+- **DSH `>=0.1.2`** (hard floor): `resumeIfDead` relies on
+  `agents.resume({ resumeSessionId })`, introduced in dsh 0.1.2. Declared
+  in `package.json` via `engines` + optional `peerDependencies`, and in
+  `dsh.compatibility.dshReleases` (the DSH-Store catalog matrix):
+  `0.1.2`, `0.1.6-alpha.1`, `0.1.7-rc.2` — each verified compatible.
+- **Node `>=20`**.
+
+No web UI, no database, no background polling — the plugin is inert until
+an agent calls a tool or an HTTP route is hit.
 
 ## Data & cleanup notes
 
 - `~/.dsh/taskboard-flow-contacts.json` — the contacts store (kept).
 - `~/.dsh/taskboard-flow-state.json` — the old dispatch-state file; the
-  v1.0.0 plugin never reads it and it can be deleted.
+  v1.0.0+ plugin never reads it and it can be deleted.
 
 ## Requirements
 
-- A running **dsh web** deployment (dsh ≥ 0.1.1).
-- No other dependencies; no dsh-taskboard needed (the board plugin is no
-  longer required by this plugin).
+- A running **dsh web** deployment (dsh ≥ 0.1.2).
+- No other dependencies; dsh-taskboard is NOT required.
 
 ## License
 
