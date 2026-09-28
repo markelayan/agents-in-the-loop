@@ -1,5 +1,22 @@
 # Changelog
 
+## v1.5.0 (2026-09-28)
+
+**External agents: send-only loopback HTTP API.** New route
+`POST /api/agents-in-the-loop/message` (loopback-only, no auth) lets
+agents outside dsh — Claude Code, scripts — message any REGISTERED
+contact by name: body `{from, contact, message}`. `from` is a free
+sender label (default `external-agent`, ≤64 chars) shown as
+`From <from>:` in the target conversation; delivery reuses the exact
+session_message engine (idle → visible full-text wake, busy →
+mid-turn-safe notice). Design law: externals are send-only — they never
+register into the contacts store, never receive messages, and
+`resumeIfDead` is hard-wired `false` so a dead session is refused
+(`409`), never resurrected. Unknown contact → `404`; empty message →
+`400`; non-POST → `405`. README gains an "External agents" section with
+curl examples and an error table. No change to the tools or the
+contacts store schema.
+
 ## v1.4.2 (2026-09-18)
 
 **Raw session-id targeting DISABLED (user directive).** `session_message`

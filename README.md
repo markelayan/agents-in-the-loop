@@ -16,9 +16,9 @@ removed in v1.0.0; the messaging core is preserved verbatim.
   plugin loader does not enforce these fields today — they are the
   machine-readable contract for installers and humans; npm may warn about
   the nonstandard `@deepseek-ai/dsh` engines key, which is advisory).
-- **Verified against**: dsh 0.1.2 through 0.1.6-alpha.1 (tools service
+- **Verified against**: dsh 0.1.2 through 0.1.7-rc.2 (tools service
   `register()`, `workspaceRegistry`/`agents` inject, `agent/created` /
-  `agent/disposed` events, runtime-context notes).
+  `agent/disposed` events, runtime-context notes, webServer routes).
 - **Node `>=20`**.
 
 Config is **file-based** (a cordis composition patch). No web UI, no database,
@@ -26,6 +26,11 @@ no background polling — the plugin is inert until an agent calls a tool.
 
 ## What it gives your agents
 
+- **External send-only HTTP API (v1.5.0)** — agents OUTSIDE dsh (Claude
+  Code, scripts) can message registered contacts over loopback HTTP:
+  `POST /api/agents-in-the-loop/message`. See
+  [External agents](#external-agents-send-only-http-api). They never
+  register, never receive, and can never resurrect a dead session.
 - **`session_message`** — list live sessions; send a message to another
   session. Delivery rules (battle-tested, preserved):
   - **Target by NAME, not id (v1.3.1)**: `send` accepts the REGISTERED
@@ -52,6 +57,26 @@ no background polling — the plugin is inert until an agent calls a tool.
     registers the calling session automatically (v1.0.0 carries the
     taskboard-flow v0.7.3 behavior) — never research your own session id.
   - Names: lowercase `[a-z0-9._-]`, ≤64 chars.
+
+## External agents (send-only HTTP API)
+
+Agents outside dsh (Claude Code, scripts) can **send** messages to any
+registered contact over loopback HTTP. They never register, never appear in
+the contacts store, and never receive messages. Dead sessions are never
+resurrected by this route.
+
+```bash
+curl -s http://127.0.0.1:9001/api/agents-in-the-loop/message \
+  -H 'Content-Type: application/json' \
+  -d '{"from":"claude-code","contact":"dev-lead","message":"task done"}'
+```
+
+- `from` — free-form sender label (default `external-agent`), shown as
+  `From <from>:` in the target conversation.
+- Delivery is identical to the `session_message` tool: idle target gets the
+  full text rendered visibly + runtime-context note; busy target gets a
+  mid-turn-safe notice.
+- Loopback-only (`127.0.0.1`); anything else gets 403.
 
 ## Install
 
