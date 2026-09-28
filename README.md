@@ -1,5 +1,10 @@
 # dsh-agents-in-the-loop (npm)
 
+> **Disclaimer:** this plugin was fully and automagically coded by
+> **GLM 5.3 Flash** (Z.ai) running inside the DeepSeek Harness agent
+> federation. **Mark Elayan is just the brains** — he directs, reviews, and
+> owns every decision; the model does the typing. :D
+
 **Cross-session call center for [DeepSeek Harness (DSH)](https://github.com/deepseek-ai)
 agents.** Two model tools, nothing else: `session_message` delivers messages
 between ANY two sessions on the dsh instance, and `contacts` is a named
