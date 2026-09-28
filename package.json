@@ -40,6 +40,13 @@
     "dsh": {
         "bundle": {
             "patch": "./cordis.patch.yml"
+        },
+        "compatibility": {
+            "dshReleases": {
+                "0.1.2": "compatible",
+                "0.1.6-alpha.1": "compatible",
+                "0.1.7-rc.2": "compatible"
+            }
         }
     },
     "engines": {

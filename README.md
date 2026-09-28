@@ -13,6 +13,27 @@ directory over session ids so agents reach each other by alias in one call.
 Formerly **taskboard-flow** — the kanban trigger/triage/task engine was
 removed in v1.0.0; the messaging core is preserved verbatim.
 
+## Permissions, external services & failure bounds
+
+Disclosed capability surface (this plugin is intentionally privileged):
+
+- **Filesystem**: reads and writes exactly ONE file — the contacts store at
+  `~/.dsh/taskboard-flow-contacts.json` (atomic tmp+rename writes; path
+  configurable via `config.contacts.file`). No other filesystem access.
+- **Network**: registers loopback HTTP routes on the dsh web server
+  (`127.0.0.1:9001`, fence rejects non-loopback peers). The
+  external send-only API accepts inbound loopback POSTs; no outbound
+  network calls are ever made.
+- **Process**: no subprocess/shell execution, no child processes.
+- **Credentials**: none read, stored, or transmitted. No secrets.
+- **External services**: none. Zero runtime dependencies, zero
+  lifecycle scripts (`preinstall`/`install`/`postinstall`/`prepare`).
+- **Failure bounds**: if the dsh core APIs the plugin injects into change
+  shape, the plugin logs an install/delivery failure and degrades to
+  inert — it never blocks session composition or other plugins. The
+  external message route refuses (409) rather than resurrecting dead
+  sessions, so it can never start work on its own.
+
 ## Compatibility
 
 - **DSH `>=0.1.2`** (hard floor): v0.7.2+ relies on
