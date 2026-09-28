@@ -1,5 +1,17 @@
 # Changelog
 
+## v1.5.1 (2026-09-28)
+
+**DSH-Store remediation (AI-Scarlett/DSH-Store#1219).** Manifest now
+declares `dsh.compatibility.dshReleases` — the exact per-version matrix
+the DSH-Store catalog automation requires (scope declarations like
+`engines`/`peerDependencies` don't satisfy it): `0.1.2` / `0.1.6-alpha.1`
+/ `0.1.7-rc.2`, each `compatible` from live verification. README gains a
+"Permissions, external services & failure bounds" section disclosing the
+contacts-store file write, the loopback-only HTTP surface, and the
+zero-dependency / zero-lifecycle-script / no-credentials posture. No
+code change.
+
 ## v1.5.0 (2026-09-28)
 
 **External agents: send-only loopback HTTP API.** New route
