@@ -20,7 +20,7 @@ function makeAgent(id, status) {
   }
 }
 
-function setup(agents) {
+function setup(agents, extra = {}) {
   const dir = mkdtempSync(join(tmpdir(), 'aitl-'))
   const file = join(dir, 'contacts.json')
   writeFileSync(file, JSON.stringify({ version: 1, contacts: Object.fromEntries(
@@ -36,7 +36,7 @@ function setup(agents) {
     agents: agentsSvc,
     webServer: { register: () => () => {} },
   }
-  apply(ctx, { contacts: { file } })
+  apply(ctx, { ...extra, contacts: { file } })
   return tools
 }
 
@@ -66,6 +66,13 @@ test('wake:false on idle target: one queued inject, no wake', async () => {
   const tools = setup([makeAgent('session-a', 'idle'), b])
   await send(tools, 'session-a', { target: 'b', message: 'later', wake: false })
   assert.deepEqual(b.calls.map((c) => c[0]), ['inject'])
+})
+
+test('maxChars is configurable', async () => {
+  const b = makeAgent('session-b', 'idle')
+  const tools = setup([makeAgent('session-a', 'idle'), b], { sessionMessage: { maxChars: 1000 } })
+  await send(tools, 'session-a', { target: 'b', message: 'y'.repeat(3000) })
+  assert.match(b.calls[0][1].content[0].text, /truncated 2000 chars/)
 })
 
 test('oversized message is truncated and carries the summary hint', async () => {

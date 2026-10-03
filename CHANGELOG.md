@@ -13,7 +13,7 @@ plugin's runtime context — on top of the steer/notice copy. Removed:
 - runtime-context note channel deleted; each message is delivered exactly
   once (idle + wake → steer/followup; busy or `wake: false` → `agent.inject`
   notice, which queues for the next step without waking).
-- 8000-char per-message cap with a truncation note.
+- per-message cap (config `sessionMessage.maxChars`, default 8000) with a truncation note.
 - every message ends with a one-line hint so the compaction summarizer
   keeps sender + gist instead of quoting it verbatim into every checkpoint.
 - `delivery` values are now `wake-steer` / `wake-followup` / `notice`.

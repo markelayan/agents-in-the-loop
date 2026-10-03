@@ -13,6 +13,7 @@
         enabled: true
         sessionMessage:
           enabled: true
+          maxChars: 8000   # per-message cap; longer text is truncated with a note
         contacts:
           enabled: true
           file: '~/.dsh/taskboard-flow-contacts.json'
