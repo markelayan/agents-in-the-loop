@@ -27,10 +27,10 @@ preserved verbatim.
   Externals never register, never receive, never resurrect sessions.
 - **Contacts HTTP API** — `GET/POST/PUT/DELETE
   /api/agents-in-the-loop/contacts` + `GET /sessions` for a client panel.
-- **State-aware delivery engine** (shared by all three paths): idle target
-  gets the full text rendered visibly into its conversation + a
-  runtime-context note; busy target gets a mid-turn-safe visible notice +
-  the note; optional `resumeIfDead` resurrects dead sessions.
+- **State-aware delivery engine** (shared by all three paths): every
+  message lands exactly once — idle target gets the full text rendered
+  visibly into its conversation; busy target gets a mid-turn-safe visible
+  notice; optional `resumeIfDead` resurrects dead sessions.
 
 ## How delivery works
 
@@ -38,19 +38,23 @@ All sends (tools and HTTP) go through one delivery engine:
 
 | Target state | What happens | Result fields |
 |---|---|---|
-| **idle** + wake | full text rendered into the target conversation (steer, fallback followup) **and** pushed into its runtime context | `delivery: context+wake-steer` (or `-followup`), `nudgeVia` |
-| **busy** + wake | full text injected as a visible plugin-source notice — renders immediately, mid-turn safe, starts no turn — plus the context note | `delivery: context+notice`, `noticeInjected: true` |
-| wake disabled | runtime-context note only | `delivery: context-only` |
+| **idle** + wake | full text rendered into the target conversation (steer, fallback followup) | `delivery: wake-steer` (or `wake-followup`), `nudgeVia` |
+| **busy**, or `wake: false` | full text queued with `agent.inject()` as a visible plugin-source notice for the target's next step — mid-turn safe, starts no turn | `delivery: notice`, `noticeInjected: true` |
 
 Harness physics: main GUI sessions start turns on user input, so an idle
 wake renders the message but does not force a turn — the agent reads it at
-its next turn via conversation history + the runtime-context note.
+its next turn from conversation history.
 
-**Runtime-context notes** are delivered through a per-session
-`systemPrompt.context()` registration and appear in the agent's "Current
-runtime context" snapshot. Notes expire after **30 minutes**, are capped at
-**5 per session**, and any `{{` in forwarded text is broken to `{ {` so
-messages can never poison the system-prompt template interpolator.
+**Context hygiene (v1.6.0).** Each message is delivered exactly **once** as
+an ordinary conversation message, so normal compaction can summarize it
+away. Messages are capped at **8000 chars** (truncated with a note — send
+long reports as a file path) and end with a one-line hint telling the
+compaction summarizer to keep only sender + gist. The pre-1.6 runtime-context
+note channel (`systemPrompt.context()`) is gone: on dsh 0.2 every change to
+runtime-context text is materialized as a new full snapshot message in
+history, so the 5-note / 30-min buffer re-copied every buffered message on
+each delivery and each expiry — the context bloat that compaction could not
+remove.
 
 **`resumeIfDead: true`** (opt-in) resurrects a dead target via
 `AgentRegistry.resume` before delivering; the resumed agent gets the

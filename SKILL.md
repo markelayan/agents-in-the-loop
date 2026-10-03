@@ -40,8 +40,9 @@ session_message { "action": "send", "target": "session-…", "message": "…" }
 - Optional: `wake` (default true), `resumeIfDead` (default false — resumes
   a dead target session first). Self-send is refused.
 - Delivery: an IDLE target's wake carries the FULL text visibly into its
-  conversation; a BUSY target gets a mid-turn-safe visible notice. Both
-  also push a runtime-context note (~30-min TTL).
+  conversation; a BUSY target gets a mid-turn-safe visible notice. Each
+  message lands exactly once. Keep messages short (8000-char cap) — put
+  long reports in a file and send the path.
 
 ### contacts
 

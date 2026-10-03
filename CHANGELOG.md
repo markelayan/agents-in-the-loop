@@ -1,5 +1,25 @@
 # Changelog
 
+## v1.6.0 (2026-10-03)
+
+**Fix: context bloat on dsh 0.2 (agents could not compact away delivered
+messages).** dsh 0.2.0 materializes every change of `systemPrompt.context()`
+text as a new durable user-role snapshot in history
+(`dsh-agent-loop` `RuntimeContextProjection`). The runtime-context note
+channel (5 notes, 30-min TTL) changed its text on every delivery and every
+expiry, so each send re-appended ALL buffered messages — plus every other
+plugin's runtime context — on top of the steer/notice copy. Removed:
+
+- runtime-context note channel deleted; each message is delivered exactly
+  once (idle + wake → steer/followup; busy or `wake: false` → `agent.inject`
+  notice, which queues for the next step without waking).
+- 8000-char per-message cap with a truncation note.
+- every message ends with a one-line hint so the compaction summarizer
+  keeps sender + gist instead of quoting it verbatim into every checkpoint.
+- `delivery` values are now `wake-steer` / `wake-followup` / `notice`.
+- compatibility matrix: `0.2.0-rc.2` added.
+- `test/delivery.test.mjs` (mock ctx, `npm test`).
+
 ## v1.5.1 (2026-09-28)
 
 **DSH-Store remediation (AI-Scarlett/DSH-Store#1219).** Manifest now

@@ -1,7 +1,7 @@
 {
     "name": "dsh-agents-in-the-loop",
-    "version": "1.5.1",
-    "description": "DSH plugin: cross-session call center for agents. session_message delivers messages between DSH sessions (idle: visible full-text wake; busy: mid-turn-safe notice; plus runtime-context notes) and resolves targets by registered contact name (stale-id-proof). contacts is a named directory over session ids. v1.5.0 adds a send-only loopback HTTP API so external agents (Claude Code etc.) can message registered contacts.",
+    "version": "1.6.0",
+    "description": "DSH plugin: cross-session call center for agents. session_message delivers messages between DSH sessions (idle: visible full-text wake; busy: mid-turn-safe notice; each message delivered exactly once, compactable) and resolves targets by registered contact name (stale-id-proof). contacts is a named directory over session ids. v1.5.0 adds a send-only loopback HTTP API so external agents (Claude Code etc.) can message registered contacts.",
     "type": "module",
     "main": "lib/index.js",
     "exports": {
@@ -45,7 +45,8 @@
             "dshReleases": {
                 "0.1.2": "compatible",
                 "0.1.6-alpha.1": "compatible",
-                "0.1.7-rc.2": "compatible"
+                "0.1.7-rc.2": "compatible",
+                "0.2.0-rc.2": "compatible"
             }
         }
     },
@@ -63,5 +64,8 @@
     },
     "publishConfig": {
         "access": "public"
+    },
+    "scripts": {
+        "test": "node --test test/delivery.test.mjs"
     }
 }
