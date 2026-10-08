@@ -50,6 +50,7 @@ function makeCtx({ agentsExtra = {}, faces = {}, config = {} } = {}) {
     on: () => () => {},
     effect: () => {},
     agents,
+    workspaceRegistry: faces.wsRegistry,
     webServer: { register: () => () => {} },
   }
   apply(ctx, { ...config, contacts: { file: contactsFile }, spawn: { ...(config.spawn ?? {}), stateFile } })
@@ -60,10 +61,6 @@ const defaultFaces = {
   presets: {
     resolve: async (id) => ({ id: `preset-${id}` }),
     mount: async () => {},
-  },
-  workspaces: {
-    get: (id) => (id === 'ws-1' ? { id, path: `/tmp/ws-${id}` } : undefined),
-    attach: async () => {},
   },
   sessions: { get: () => ({}) },
   sessionTitle: { rename: () => {} },
@@ -160,7 +157,7 @@ test('no preset anywhere: explicit error, never a bare shell', async () => {
 test('workspace allowlist enforced; allowed workspace pins cwd', async () => {
   const { tools, agents } = makeCtx({
     config: { ...baseConfig, spawn: { ...baseConfig.spawn, workspaces: ['ws-1'] } },
-    faces: defaultFaces,
+    faces: { ...defaultFaces, wsRegistry: { resolveByPath: async () => undefined, get: (id) => (id === 'ws-1' ? { id, path: '/tmp/ws-ws-1', attachSession: async () => {} } : undefined) } },
   })
   const bad = await spawn(tools, 'session-leader', { name: 'w1', message: 'm', workspaceId: 'ws-other' })
   assert.equal(bad.ok, false)
@@ -202,19 +199,21 @@ test('permission arg applied via permissionPresets when faces exist', async () =
   assert.ok(agents.created.length === 1)
 })
 
-test('caller workspace auto-attach: no workspaceId → caller cwd matched and child attached', async () => {
+test('caller workspace auto-attach: no workspaceId → exec header cwd resolved and child attached', async () => {
   const attached = []
   const faces = {
     ...defaultFaces,
-    workspaces: {
-      list: () => [{ id: 'ws-1', path: '/tmp/ws-ws-1' }],
-      get: (id) => (id === 'ws-1' ? { id, path: '/tmp/ws-ws-1' } : undefined),
-      attach: async (wid, sid) => { attached.push([wid, sid]) },
+    wsRegistry: {
+      resolveByPath: async (cwd) => (cwd === '/tmp/ws-ws-1' ? { id: 'ws-1' } : undefined),
+      get: (id) => (id === 'ws-1' ? { id, path: '/tmp/ws-ws-1', attachSession: async (sid) => { attached.push([id, sid]) } } : undefined),
     },
-    sessions: { get: (id) => (id === 'session-leader' ? { header: { cwd: '/tmp/ws-ws-1' } } : undefined) },
   }
   const { tools, agents } = makeCtx({ config: { ...baseConfig, spawn: { ...baseConfig.spawn, workspaces: ['ws-2'] } }, faces })
-  const r = await spawn(tools, 'session-leader', { name: 'w-auto', message: 'm' })
+  // spawn() helper passes exec.agent = { id } only; call execute directly with the session header
+  const r = JSON.parse((await tools.spawn_session.execute(
+    { name: 'w-auto', message: 'm' },
+    { agent: { id: 'session-leader', session: { header: { cwd: '/tmp/ws-ws-1' } } } },
+  ).then((x) => x.text)))
   assert.equal(r.ok, true, r.error)
   assert.equal(r.workspaceAuto, true)
   assert.equal(r.workspaceId, 'ws-1')
