@@ -1,5 +1,24 @@
 # Changelog
 
+## v1.8.0 (2026-10-08)
+
+**Feature: `spawn_session` tool — in-process spawning of persistent dsh sessions (`spawn` block, default OFF).**
+Same capability as the Mission Control bridge's spawn path, without MC and
+without external scripts: the plugin creates the session through the host
+registry (`agents.create` + `agentPresets` resolve/mount + `workspaces` —
+the exact faces dsh-taskboard uses for scheduled executions). Preset pin
+(resolved before create, mounted in setup — never a bare default shell),
+model pin **config-only** (`spawn.provider/model`, allowlist-enforced;
+model/provider tool args are rejected), optional workspace
+(`spawn.workspaces` allowlist — the cross-workspace ban enforced at tool
+level) and permission (`spawn.allowedPermissions`, default `read-only`).
+Seat cap over the contacts store (`spawn.maxSessions`, default 9), JSONL
+audit journal (`spawn.stateFile`), contacts registration under the chosen
+name, first message delivered through the shared once-only engine.
+Capability-degraded faces refuse loudly instead of silently changing
+semantics. Spawned sessions are persistent peers (distinct from 1-shot
+subagent children — deliberately registered in contacts).
+
 ## v1.7.0 (2026-10-08)
 
 **Feature: optional Mission Control integration (`mc` block, default OFF).**

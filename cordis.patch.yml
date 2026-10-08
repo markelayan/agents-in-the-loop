@@ -17,6 +17,21 @@
         contacts:
           enabled: true
           file: '~/.dsh/taskboard-flow-contacts.json'
+        # v1.8.0 — spawn_session tool (in-process session creation, same
+        # faces dsh-taskboard uses). OFF by default; flip enabled to turn on.
+        # Model/provider are pinned here and NEVER selectable per call.
+        spawn:
+          enabled: false
+          maxSessions: 9
+          preset: ''            # default preset; '' = caller must pass one
+          allowedPresets: []    # empty = any resolvable preset
+          provider: zai-coding-cn
+          model: glm-5.3-flash
+          reasoningEffort: ''   # '' = unset
+          allowedModels: [zai-coding-cn/glm-5.3-flash, openai-codex/gpt-6-luna]
+          workspaces: []        # workspace-id allowlist; empty = caller default only
+          allowedPermissions: [read-only]
+          stateFile: '~/.dsh/spawned-sessions.json'
         # DSH-MC-1 — Mission Control runtime (SSE → spawn/deliver/close).
         # Key file: JSON {"key":"mca_…"}; never logged, never printed.
         mc:

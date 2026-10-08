@@ -1,6 +1,6 @@
 ---
 name: agents-in-the-loop
-description: Cross-session call center for DSH agents — session_message delivers messages between sessions (idle: visible wake; busy: mid-turn-safe notice), contacts is a named directory over session ids with name-only self-registration. Load when a task needs to reach, register, or message another agent session.
+description: Cross-session call center for DSH agents — session_message delivers messages between sessions (idle: visible wake; busy: mid-turn-safe notice), contacts is a named directory over session ids with name-only self-registration, spawn_session spawns a new persistent session with preset+model pins (config-gated). Load when a task needs to reach, register, message, or spawn another agent session.
 ---
 
 # SKILL.md — agents-in-the-loop
@@ -23,6 +23,11 @@ register yourself as a contact, or handle an inbound `[session-message]`.
 2. **`contacts`** — named contact directory: resolve an alias like
    "advisor" to its session id + live status in one call, message it in
    one call, and manage entries at runtime.
+3. **`spawn_session`** (only when the plugin config sets `spawn.enabled=true`)
+   — spawn a NEW persistent dsh session with a preset + config-pinned model,
+   optionally in a workspace; it is registered in contacts under `name` and
+   gets your `message` as its first task brief. Persistent co-worker, NOT a
+   1-shot subagent.
 
 ## Tool reference
 

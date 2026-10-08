@@ -27,7 +27,12 @@ preserved verbatim.
   Externals never register, never receive, never resurrect sessions.
 - **Contacts HTTP API** — `GET/POST/PUT/DELETE
   /api/agents-in-the-loop/contacts` + `GET /sessions` for a client panel.
-- **State-aware delivery engine** (shared by all three paths): every
+- **`spawn_session`** (v1.8.0, `spawn.enabled`, default OFF) — spawn a NEW
+  persistent dsh session in-process (no external scripts, no MC required):
+  preset pin + config-pinned model, optional workspace/permission, seat cap,
+  contacts registration, first message delivered. Spawned sessions are
+  persistent co-workers reachable by name via `session_message`/`contacts`.
+- **State-aware delivery engine** (shared by all paths): every
   message lands exactly once — idle target gets the full text rendered
   visibly into its conversation; busy target gets a mid-turn-safe visible
   notice; optional `resumeIfDead` resurrects dead sessions.
@@ -103,6 +108,31 @@ contacts { action: "remove", name }
 - Records carry `label`, `tags`, `note`, `createdAt`, `updatedAt`, and a
   computed live `status` (`idle` / `running` / … / `dead`).
 
+## The `spawn_session` tool (v1.8.0 — default OFF)
+
+Spawns a NEW persistent dsh session the way the Mission Control bridge does,
+but fully in-process (host `agents.create` + `agentPresets` resolve/mount +
+`workspaces` — the same faces dsh-taskboard uses for scheduled executions):
+
+- args: `name` (contacts name for the new session) + `message` (first task
+  brief, delivered once via the shared engine); optional `preset`
+  (default `spawn.preset`), `workspaceId` (must be allowlisted),
+  `permission` (`read-only` default; must be in `spawn.allowedPermissions`),
+  `wake` (default true).
+- The model is pinned by config (`spawn.provider/model`) and CANNOT be
+  chosen per call — passing `model`/`provider` is rejected with an error.
+- Preset is resolved BEFORE creation and mounted in `setup` — a session
+  without a resolvable preset is refused, never spawned as a bare shell.
+- Seat cap counts live sessions registered in the contacts store
+  (`spawn.maxSessions`); every spawn appends a line to the JSONL journal
+  (`spawn.stateFile`) for audit.
+- Missing faces degrade loudly: no `agentPresets` → refuse; no
+  `permissionPresets` → reject the permission arg; missing rename/attach
+  are skipped as cosmetic.
+- Spawned sessions are PERSISTENT peers (deliberately registered in
+  contacts, reachable by name) — distinct from 1-shot `subagent` children,
+  which must never enter the directory.
+
 ## External agents (send-only HTTP API)
 
 Agents outside dsh (Claude Code, scripts) can **send** messages to any
@@ -166,6 +196,17 @@ One row (all keys optional, defaults shown):
         contacts:
           enabled: true      # kill-switch for the contacts tool
           # file: '~/.dsh/taskboard-flow-contacts.json'   # default store
+        spawn:
+          enabled: false          # kill-switch for the spawn_session tool
+          maxSessions: 9          # seat cap over the contacts store
+          preset: ''              # default preset ('' = caller must pass one)
+          allowedPresets: []      # empty = any resolvable preset
+          provider: zai-coding-cn # model pin — CONFIG-ONLY, never a tool arg
+          model: glm-5.3-flash
+          allowedModels: [zai-coding-cn/glm-5.3-flash, openai-codex/gpt-6-luna]
+          workspaces: []          # workspace-id allowlist; empty = caller default
+          allowedPermissions: [read-only]
+          stateFile: '~/.dsh/spawned-sessions.json'  # JSONL audit journal
 ```
 
 The contacts store defaults to `~/.dsh/taskboard-flow-contacts.json` — the
