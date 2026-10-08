@@ -18,10 +18,11 @@
           enabled: true
           file: '~/.dsh/taskboard-flow-contacts.json'
         # v1.8.0 — spawn_session tool (in-process session creation, same
-        # faces dsh-taskboard uses). OFF by default; flip enabled to turn on.
+        # faces dsh-taskboard uses). Enabled LIVE for testing (Mark 2026-10-08);
+        # published default must return to false before npm release.
         # Model/provider are pinned here and NEVER selectable per call.
         spawn:
-          enabled: false
+          enabled: true
           maxSessions: 9
           preset: ''            # default preset; '' = caller must pass one
           allowedPresets: []    # empty = any resolvable preset

@@ -201,3 +201,32 @@ test('permission arg applied via permissionPresets when faces exist', async () =
   assert.equal(setArgs, 'workspace-write')
   assert.ok(agents.created.length === 1)
 })
+
+test('caller workspace auto-attach: no workspaceId → caller cwd matched and child attached', async () => {
+  const attached = []
+  const faces = {
+    ...defaultFaces,
+    workspaces: {
+      list: () => [{ id: 'ws-1', path: '/tmp/ws-ws-1' }],
+      get: (id) => (id === 'ws-1' ? { id, path: '/tmp/ws-ws-1' } : undefined),
+      attach: async (wid, sid) => { attached.push([wid, sid]) },
+    },
+    sessions: { get: (id) => (id === 'session-leader' ? { header: { cwd: '/tmp/ws-ws-1' } } : undefined) },
+  }
+  const { tools, agents } = makeCtx({ config: { ...baseConfig, spawn: { ...baseConfig.spawn, workspaces: ['ws-2'] } }, faces })
+  const r = await spawn(tools, 'session-leader', { name: 'w-auto', message: 'm' })
+  assert.equal(r.ok, true, r.error)
+  assert.equal(r.workspaceAuto, true)
+  assert.equal(r.workspaceId, 'ws-1')
+  assert.equal(agents.created[0].meta.cwd, '/tmp/ws-ws-1')
+  assert.equal(attached.length, 1)
+})
+
+test('no caller header and no workspaceId: still spawns, ungrouped (explicit null)', async () => {
+  const { tools, agents } = makeCtx({ config: baseConfig, faces: defaultFaces })
+  const r = await spawn(tools, 'session-unknown', { name: 'w-nogroup', message: 'm' })
+  assert.equal(r.ok, true, r.error)
+  assert.equal(r.workspaceId, null)
+  assert.equal(r.workspaceAuto, false)
+  assert.equal(agents.created[0].meta.cwd, undefined)
+})
