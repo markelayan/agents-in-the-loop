@@ -25,8 +25,12 @@ function makeCtx({ agentsExtra = {}, faces = {}, config = {} } = {}) {
       agents.created.push(opts)
       const id = opts.sessionId
       agentsExtra[id] = {
-        id, status: 'idle',
-        steer: () => {}, followup: () => {}, inject: () => {},
+        id, status: 'idle', calls: [],
+        steer: (m) => {
+          if (agents.failSteer) throw new Error('steer failed')
+          agentsExtra[id].calls.push(['steer', m])
+        },
+        followup: () => {}, inject: () => {},
         ctx: { inject: () => {} },
       }
       return { agent: agentsExtra[id], dispose: async () => { agents.disposed.push(id) } }
@@ -99,7 +103,9 @@ test('happy path: create pinned, contact registered, journal, first message stee
   assert.ok(existsSync(stateFile))
   assert.match(readFileSync(stateFile, 'utf-8'), /"action":"spawn"/)
   const agent = agents.get(r.sessionId)
-  assert.equal(agent.calls === undefined ? 'idle-ok' : 'idle-ok', 'idle-ok')
+  assert.equal(agent.calls.length, 1)
+  assert.equal(agent.calls[0][0], 'steer')
+  assert.match(agent.calls[0][1].content[0].text, /do the thing/)
 })
 
 test('duplicate name rejected before any face call', async () => {
@@ -228,4 +234,37 @@ test('no caller header and no workspaceId: still spawns, ungrouped (explicit nul
   assert.equal(r.workspaceId, null)
   assert.equal(r.workspaceAuto, false)
   assert.equal(agents.created[0].meta.cwd, undefined)
+})
+
+test('requested permission that cannot be applied: fail closed, session disposed', async () => {
+  const { tools, agents } = makeCtx({
+    config: { ...baseConfig, spawn: { ...baseConfig.spawn, allowedPermissions: ['read-only', 'workspace-write'] } },
+    faces: { ...defaultFaces, permissionPresets: undefined, sessions: undefined },
+  })
+  const r = await spawn(tools, 'session-leader', { name: 'w-perm', message: 'm', permission: 'workspace-write' })
+  assert.equal(r.ok, false)
+  assert.match(r.error, /could not be applied/)
+  assert.ok(agents.disposed.includes(r.sessionId === undefined ? agents.disposed[0] : agents.disposed[0]))
+})
+
+test('failed first-message delivery: rollback — disposed, contact removed', async () => {
+  const { tools, agents, contactsFile } = makeCtx({ config: baseConfig, faces: defaultFaces })
+  agents.failSteer = true
+  const r = await spawn(tools, 'session-leader', { name: 'w-del', message: 'm' })
+  assert.equal(r.ok, false)
+  assert.match(r.error, /first-message delivery failed/)
+  assert.ok(agents.disposed.length === 1)
+  const stored = JSON.parse(readFileSync(contactsFile, 'utf-8')).contacts
+  assert.equal(stored['w-del'], undefined)
+})
+
+test('pinned model not in spawn.allowedModels: config error, no create', async () => {
+  const { tools, agents } = makeCtx({
+    config: { ...baseConfig, spawn: { ...baseConfig.spawn, allowedModels: ['other/model'] } },
+    faces: defaultFaces,
+  })
+  const r = await spawn(tools, 'session-leader', { name: 'w-model', message: 'm' })
+  assert.equal(r.ok, false)
+  assert.match(r.error, /not in spawn.allowedModels/)
+  assert.equal(agents.created.length, 0)
 })
