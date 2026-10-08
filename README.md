@@ -222,3 +222,56 @@ an agent calls a tool or an HTTP route is hit.
 ## License
 
 MIT
+
+## Mission Control integration (optional, v1.7.0)
+
+Optional bridge that lets a Mission Control (MC) API drive dsh agent
+sessions. **OFF by default** — the plugin behaves exactly as v1.6.0 unless
+`mc.enabled: true` is set in the plugin config. When off: no SSE connection,
+no spawn, and `/api/agents-in-the-loop/mc-health` answers `{"ok":true,"enabled":false}`.
+
+When enabled it:
+
+- spawns a dsh session (via `~/.dsh/new-session.mjs`) when an MC task is
+  assigned to an agent whose config has `runtime: "dsh"` (model/provider are
+  assigned ONLY at spawn; MC agent config overrides the mc block);
+- delivers MC task comments and review-rejects into the session;
+- closes the session and frees its seat when the task reaches done/failed/deleted;
+- enforces seats (`maxSessions`), priority ordering, and `metadata.after`
+  dependencies; reminds silent sessions (2 reminders, then a BLOCKED comment);
+- reconciles on startup/reconnect (no duplicate sessions) and posts loud
+  `dsh-runtime · BLOCKED · spawn failed: …` comments (max 3 tries).
+
+Config keys (plugin config → `mc`):
+
+| key | type | default | notes |
+|---|---|---|---|
+| `enabled` | boolean | `false` | master switch |
+| `url` | string | `http://127.0.0.1:9999` | MC API base |
+| `apiKeyFile` | string | — | path to JSON `{"key": "…"}`; required when enabled |
+| `maxSessions` | int | `9` | seat cap |
+| `silentMinutes` | int | `20` | reminder threshold |
+| `excludedContacts` | string[] | `["dsh-maintainer"]` | excluded from seat count |
+| `provider` / `model` | string | `zai-coding-cn` / `glm-5.3-flash` | spawn-time model ids |
+| `newSession` | string | `~/.dsh/new-session.mjs` | spawner path |
+| `stateFile` | string | `~/.dsh/mc-runtime-state.json` | journal |
+| `projects.<slug>.workspaceId` | string | — | MC project → dsh workspace |
+| `projects.<slug>.firstMessage` | string | — | template path ({TICKET} {TITLE} {SESSION} {TASK_ID} {PROJECT} {ROLE} {RULES}) |
+| `projects.<slug>.rules` | string | — | appended RULES text |
+
+Minimal example:
+
+```yaml
+mc:
+  enabled: true
+  url: 'http://127.0.0.1:9999'
+  apiKeyFile: '/path/to/.dsh-runtime-key.json'
+  projects:
+    sandbox:
+      workspaceId: '<workspace-uuid>'
+      firstMessage: '/path/to/first-message.txt'
+      rules: 'TEST task: MC tools only.'
+```
+
+A missing/unreadable key file or unreachable MC logs one clear warning; the
+rest of the plugin keeps working.

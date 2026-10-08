@@ -17,3 +17,19 @@
         contacts:
           enabled: true
           file: '~/.dsh/taskboard-flow-contacts.json'
+        # DSH-MC-1 — Mission Control runtime (SSE → spawn/deliver/close).
+        # Key file: JSON {"key":"mca_…"}; never logged, never printed.
+        mc:
+          enabled: true
+          url: 'http://127.0.0.1:9999'
+          apiKeyFile: '/Users/markelayan/Desktop/hermes/services/stack/mission-control/data/.dsh-runtime-key.json'
+          maxSessions: 9
+          silentMinutes: 20
+          excludedContacts: [dsh-maintainer]
+          provider: zai-coding-cn
+          model: glm-5.3-flash
+          projects:
+            sandbox:
+              workspaceId: '8008e180-a231-4007-a035-cd15c9807066'
+              firstMessage: '/Users/markelayan/Desktop/hermes/services/stack/mission-control/run/first-message.txt'
+              rules: 'TEST task: no code, no git, no repo or Atlas edits; MC tools only.'

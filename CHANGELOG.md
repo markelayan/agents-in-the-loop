@@ -1,5 +1,16 @@
 # Changelog
 
+## v1.7.0 (2026-10-08)
+
+**Feature: optional Mission Control integration (`mc` block, default OFF).**
+MC tasks assigned to `runtime: "dsh"` agents auto-spawn dsh sessions
+(new-session.mjs; provider/model fixed to `zai-coding-cn/glm-5.3-flash` at
+spawn only), comments + review-rejects are delivered in, sessions close on
+done/failed, seats/priority/after + silence reminders + reconcile. Off by
+default: no SSE, no spawn, mc-health answers `{enabled:false}`. Bad key file
+or unreachable MC = one warning, plugin unaffected.
+
+
 ## v1.6.0 (2026-10-03)
 
 **Fix: context bloat on dsh 0.2 (agents could not compact away delivered
