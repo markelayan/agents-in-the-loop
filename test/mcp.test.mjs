@@ -163,3 +163,49 @@ if (sdkAvailable) {
   test('SDK not present in repo — integration tests skipped (live-only)', () => { assert.ok(true) })
 }
 
+
+describe('mcp internals (kill-switch + isError mapping, no SDK needed)', () => {
+  const defs = {
+    contacts: { name: 'contacts', description: 'd', parameters: { type: 'object', properties: {} }, execute: async () => ({ text: JSON.stringify({ ok: true, value: [] }) }) },
+    session_message: { name: 'session_message', description: 'd', parameters: { type: 'object', properties: {} }, execute: async () => ({ text: JSON.stringify({ ok: false, error: 'nope' }) }) },
+  }
+  const route = createMcpRouteLazy({
+    mcp: resolveMcpConfig({ mcp: { enabled: true, apiKeyFile: keyFile, tools: ['contacts', 'session_message', 'spawn_session'] } }),
+    log: noopLog,
+    toolsService: makeToolsService(defs),
+    writeJson: () => {},
+    readBody: () => Promise.resolve({}),
+  })
+  const { callTool, mcpToolDefs } = route._internals
+
+  test('kill-switched tool (spawn_session unregistered) disappears from defs', () => {
+    assert.deepEqual(mcpToolDefs().map((t) => t.name), ['contacts', 'session_message'])
+  })
+  test('unknown tool name → isError with explicit error', async () => {
+    const out = await callTool('nope', {})
+    assert.equal(out.isError, true)
+    assert.match(out.content[0].text, /not exposed over MCP/)
+  })
+  test('registered tool returning ok:false → isError true, text preserved', async () => {
+    const out = await callTool('session_message', {})
+    assert.equal(out.isError, true)
+    assert.match(out.content[0].text, /nope/)
+  })
+  test('registered tool returning ok:true → isError false', async () => {
+    const out = await callTool('contacts', {})
+    assert.equal(out.isError, false)
+    assert.match(out.content[0].text, /"ok":true/)
+  })
+  test('tool execute throwing → isError with message, no crash', async () => {
+    const boom = createMcpRouteLazy({
+      mcp: resolveMcpConfig({ mcp: { enabled: true, apiKeyFile: keyFile, tools: ['contacts'] } }),
+      log: noopLog,
+      toolsService: makeToolsService({ contacts: { name: 'contacts', parameters: { type: 'object' }, execute: async () => { throw new Error('boom') } } }),
+      writeJson: () => {},
+      readBody: () => Promise.resolve({}),
+    })._internals
+    const out = await boom.callTool('contacts', {})
+    assert.equal(out.isError, true)
+    assert.match(out.content[0].text, /boom/)
+  })
+})
