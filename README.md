@@ -241,7 +241,7 @@ Disclosed capability surface (this plugin is intentionally privileged):
 
 - **DSH `>=0.1.2`** (hard floor): `resumeIfDead` relies on
   `agents.resume({ resumeSessionId })`, introduced in dsh 0.1.2. Declared
-  in `package.json` via `engines` + optional `peerDependencies`, and in
+  in `package.json` via `engines` (v1.10 requires Node ≥ 22 for `node:sqlite`), and in
   `dsh.compatibility.dshReleases` (the DSH-Store catalog matrix):
   `0.1.2`, `0.1.6-alpha.1`, `0.1.7-rc.2` / `0.2.0-rc.2` — each verified compatible.
 - **Node `>=20`**.
@@ -341,7 +341,7 @@ contacts store uses `node:sqlite`, which is built into Node ≥ 22
   reaches a tool without both fences. Missing/corrupt key file = locked
   (fail closed). Error mapping: `-32700` parse, `-32600` invalid request
   (also empty batch, non-object body, id-less request), `-32601` unknown
-  method, `-32603` internal (echoes request id).
+  method, `-32603` internal (answered with `id: null`).
 - **Protocol version**: echoes the client's version when it is one of
   `2024-11-05` / `2025-03-26` / `2025-06-18`, else falls back to
   `2025-03-26`.
