@@ -243,7 +243,7 @@ Disclosed capability surface (this plugin is intentionally privileged):
   `agents.resume({ resumeSessionId })`, introduced in dsh 0.1.2. Declared
   in `package.json` via `engines` + optional `peerDependencies`, and in
   `dsh.compatibility.dshReleases` (the DSH-Store catalog matrix):
-  `0.1.2`, `0.1.6-alpha.1`, `0.1.7-rc.2` — each verified compatible.
+  `0.1.2`, `0.1.6-alpha.1`, `0.1.7-rc.2` / `0.2.0-rc.2` — each verified compatible.
 - **Node `>=20`**.
 
 No web UI, no database, no background polling — the plugin is inert until

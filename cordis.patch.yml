@@ -10,27 +10,24 @@
       name: dsh-agents-in-the-loop
       disabled: false
       config:
-        enabled: true
-        sessionMessage:
-          enabled: true
-          maxChars: 8000   # per-message cap; longer text is truncated with a note
+        enabled: false        # published default; TESTING deployments flip true in the LIVE overlaysessionMessage:
+          enabled: false        # published default; TESTING deployments flip true in the LIVE overlaymaxChars: 8000   # per-message cap; longer text is truncated with a note
         contacts:
-          enabled: true
-          file: '~/.dsh/taskboard-flow-contacts.json'
+          enabled: false        # published default; TESTING deployments flip true in the LIVE overlayfile: '~/.dsh/taskboard-flow-contacts.json'
         # v1.8.0 — spawn_session tool (in-process session creation, same
         # faces dsh-taskboard uses). Enabled LIVE for testing (Mark 2026-10-08);
         # published default must return to false before npm release.
         # Model/provider are pinned here and NEVER selectable per call.
         mcp:
-          enabled: true         # TESTING; flip back to false before npm release
+          enabled: false        # published default; TESTING deployments flip true in the LIVE overlay
           path: /api/agents-in-the-loop/mcp
           apiKeyFile: ~/.dsh/aitl-mcp-key.json
           callerId: session-mcp-external
           allowNonLoopback: false
           tools: [contacts, session_message, spawn_session]
-          allTools: true         # expose EVERY harness tool (full control) — Mark directive 2026-10-09
+          allTools: false        # ⚠ true = FULL machine control for key holders (Mark directive 2026-10-09; TESTING only in live overlay)
           inbox:                # v1.10.0 maildrop + contacts-in-SQLite
-            enabled: true       # TESTING; flip false before npm release
+            enabled: false        # published default; TESTING deployments flip true in the LIVE overlay
             file: ~/.dsh/aitl.db
             maxChars: 8000
             maxPending: 100
@@ -38,13 +35,11 @@
             redeliverAfterMin: 5
             identityHeader: x-aitl-identity
             panel:
-              enabled: true
-          bridge:
+              enabled: false        # published default; TESTING deployments flip true in the LIVE overlaybridge:
             enabled: false      # phase 2 (harness tool bridging) — not implemented yet
             allowedTools: []
         spawn:
-          enabled: true
-          maxSessions: 9
+          enabled: false        # published default; TESTING deployments flip true in the LIVE overlaymaxSessions: 9
           preset: ''            # default preset; '' = caller must pass one
           allowedPresets: []    # empty = any resolvable preset
           provider: zai-coding-cn
@@ -57,9 +52,8 @@
         # DSH-MC-1 — Mission Control runtime (SSE → spawn/deliver/close).
         # Key file: JSON {"key":"mca_…"}; never logged, never printed.
         mc:
-          enabled: true
-          url: 'http://127.0.0.1:9999'
-          apiKeyFile: '/Users/markelayan/Desktop/hermes/services/stack/mission-control/data/.dsh-runtime-key.json'
+          enabled: false        # published default; TESTING deployments flip true in the LIVE overlayurl: 'http://127.0.0.1:9999'
+          apiKeyFile: '~/.dsh/mc-runtime-key.json   # placeholder — set your real path in the live overlay'
           maxSessions: 9
           silentMinutes: 20
           excludedContacts: [dsh-maintainer]
@@ -68,5 +62,5 @@
           projects:
             sandbox:
               workspaceId: '8008e180-a231-4007-a035-cd15c9807066'
-              firstMessage: '/Users/markelayan/Desktop/hermes/services/stack/mission-control/run/first-message.txt'
+              firstMessage: '~/.dsh/mc-first-message.txt  # placeholder — set your real path in the live overlay'
               rules: 'TEST task: no code, no git, no repo or Atlas edits; MC tools only.'
