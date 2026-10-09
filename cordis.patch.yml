@@ -21,6 +21,16 @@
         # faces dsh-taskboard uses). Enabled LIVE for testing (Mark 2026-10-08);
         # published default must return to false before npm release.
         # Model/provider are pinned here and NEVER selectable per call.
+        mcp:
+          enabled: false        # kill-switch; flip true in the LIVE overlay only
+          path: /api/agents-in-the-loop/mcp
+          apiKeyFile: ~/.dsh/aitl-mcp-key.json
+          callerId: session-mcp-external
+          allowNonLoopback: false
+          tools: [contacts, session_message, spawn_session]
+          bridge:
+            enabled: false      # phase 2 (harness tool bridging) — not implemented yet
+            allowedTools: []
         spawn:
           enabled: true
           maxSessions: 9
@@ -31,7 +41,7 @@
           reasoningEffort: ''   # '' = unset
           allowedModels: [zai-coding-cn/glm-5.3-flash, openai-codex/gpt-6-luna]
           workspaces: []        # workspace-id allowlist; empty = caller default only
-          allowedPermissions: [read-only]
+          allowedPermissions: [read-only, workspace-write]
           stateFile: '~/.dsh/spawned-sessions.json'
         # DSH-MC-1 — Mission Control runtime (SSE → spawn/deliver/close).
         # Key file: JSON {"key":"mca_…"}; never logged, never printed.

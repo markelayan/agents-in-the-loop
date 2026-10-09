@@ -1,7 +1,7 @@
 {
   "name": "dsh-agents-in-the-loop",
-  "version": "1.8.0",
-  "description": "DSH plugin: cross-session call center for agents. session_message delivers messages between DSH sessions (idle: visible full-text wake; busy: mid-turn-safe notice; each message delivered exactly once, compactable) and resolves targets by registered contact name (stale-id-proof). contacts is a named directory over session ids. v1.7.0 adds an optional Mission Control integration (mc.enabled, default false): MC tasks auto-spawn dsh agent sessions, comments/review-rejects are delivered, sessions close on done/failed, seats/priority/after + silent reminders + reconcile. v1.8.0 adds spawn_session (spawn.enabled, default false): in-process spawning of new persistent dsh sessions with preset+model pins via the host registry — no external scripts.",
+  "version": "1.9.0",
+  "description": "DSH plugin: cross-session call center for agents. session_message delivers messages between DSH sessions (idle: visible full-text wake; busy: mid-turn-safe notice; each message delivered exactly once, compactable) and resolves targets by registered contact name (stale-id-proof). contacts is a named directory over session ids. v1.7.0 adds an optional Mission Control integration (mc.enabled, default false): MC tasks auto-spawn dsh agent sessions, comments/review-rejects are delivered, sessions close on done/failed, seats/priority/after + silent reminders + reconcile. v1.8.0 adds spawn_session (spawn.enabled, default false): in-process spawning of new persistent dsh sessions with preset+model pins via the host registry \u2014 no external scripts.",
   "type": "module",
   "main": "lib/index.js",
   "exports": {
@@ -55,10 +55,14 @@
     "@deepseek-ai/dsh": ">=0.1.2"
   },
   "peerDependencies": {
-    "@deepseek-ai/dsh": ">=0.1.2"
+    "@deepseek-ai/dsh": ">=0.1.2",
+    "@modelcontextprotocol/sdk": ">=1.0.0"
   },
   "peerDependenciesMeta": {
     "@deepseek-ai/dsh": {
+      "optional": true
+    },
+    "@modelcontextprotocol/sdk": {
       "optional": true
     }
   },
@@ -66,6 +70,6 @@
     "access": "public"
   },
   "scripts": {
-    "test": "node --test test/delivery.test.mjs test/spawn.test.mjs"
+    "test": "node --test test/delivery.test.mjs test/spawn.test.mjs test/mcp.test.mjs"
   }
 }
