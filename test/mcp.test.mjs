@@ -257,3 +257,48 @@ describe('QA round-2 protocol edges', () => {
     assert.match(json.result.content[0].text, /"ok":true/)
   })
 })
+
+describe('mcp allTools (phase 2 full control)', () => {
+  const harnessDefs = {
+    bash: { name: 'bash', description: 'shell', parameters: { type: 'object', properties: { cmd: { type: 'string' } } }, execute: async () => ({ text: JSON.stringify({ ok: true, out: 'ran' }) }) },
+    contacts: { name: 'contacts', description: 'd', parameters: { type: 'object', properties: {} }, execute: async () => ({ text: JSON.stringify({ ok: true, value: [] }) }) },
+  }
+  test('allTools: tools/list enumerates the WHOLE service via view().visible', async () => {
+    const r = createMcpRouteLazy({
+      mcp: resolveMcpConfig({ mcp: { enabled: true, apiKeyFile: keyFile, allTools: true } }),
+      log: noopLog,
+      toolsService: { get: (n) => harnessDefs[n], view: () => ({ visible: new Map([['bash', harnessDefs.bash], ['contacts', harnessDefs.contacts]]) }) },
+      writeJson: () => {},
+      readBody: () => Promise.resolve({}),
+    })
+    assert.deepEqual(r._internals.mcpToolDefs().map((t) => t.name), ['bash', 'contacts'])
+    const out = await r._internals.callTool('bash', { cmd: 'x' })
+    assert.equal(out.isError, false)
+  })
+  test('allTools enumeration failure → fail closed: empty tools/list, unregistered call → isError', async () => {
+    const r = createMcpRouteLazy({
+      mcp: resolveMcpConfig({ mcp: { enabled: true, apiKeyFile: keyFile, allTools: true } }),
+      log: noopLog,
+      toolsService: { get: () => undefined, view: () => ({ visible: new Map() }) },
+      writeJson: () => {},
+      readBody: () => Promise.resolve({}),
+    })
+    assert.deepEqual(r._internals.mcpToolDefs(), [])
+    const out = await r._internals.callTool('bash', {})
+    assert.equal(out.isError, true)
+    assert.match(out.content[0].text, /not registered/)
+  })
+  test('id:0 is a valid request id over HTTP', async () => {
+    const zeroRoute = createMcpRouteLazy({
+      mcp: resolveMcpConfig({ mcp: { enabled: true, apiKeyFile: keyFile } }),
+      log: noopLog,
+      toolsService: makeToolsService({}),
+      writeJson: (res, st, b) => { res.writeHead(st, { 'content-type': 'application/json' }); res.end(JSON.stringify(b)) },
+      readBody: (req) => new Promise((resolve) => { let d = ''; req.on('data', (c) => (d += c)); req.on('end', () => { try { resolve(d ? JSON.parse(d) : null) } catch { resolve(null) } }) }),
+    })
+    const { status, json } = await post(zeroRoute, { jsonrpc: '2.0', id: 0, method: 'tools/list' })
+    assert.equal(status, 200)
+    assert.equal(json.id, 0)
+    assert.ok(json.result)
+  })
+})
