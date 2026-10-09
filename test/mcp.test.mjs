@@ -74,13 +74,20 @@ describe('mcp route guards (no SDK needed)', () => {
   let route, writeJsonOut
   const writeJson = (res, status, body) => { res.writeHead(status); res.end(JSON.stringify(body)) }
   const readBody = () => Promise.resolve({})
+  const readBodyReq = (req) => new Promise((resolve, reject) => {
+    let data = ''
+    req.on('data', (c) => (data += c))
+    req.on('end', () => { try { resolve(data ? JSON.parse(data) : {}) } catch { resolve(null) } })
+    req.on('error', () => resolve(null))
+  })
   route = createMcpRouteLazy({
     mcp: resolveMcpConfig({ mcp: { enabled: true, apiKeyFile: keyFile } }),
     log: noopLog,
     toolsService: makeToolsService({}),
     writeJson,
-    readBody,
+    readBody: readBodyReq,
   })
+
 
   test('non-loopback rejected 403 before auth', async () => {
     const req = fakeReq({ addr: '192.168.1.5', auth: 'whatever' })
@@ -105,64 +112,51 @@ describe('mcp route guards (no SDK needed)', () => {
     await route.handler(fakeReq({ method: 'GET', auth: key }), res)
     assert.equal(res.statusCode, 405)
   })
-  test('valid initialize POST → 200 JSON-RPC result (or 503 when SDK absent)', async () => {
-    const key = loadMcpKey(keyFile)
-    const route2 = createMcpRouteLazy({
-      mcp: resolveMcpConfig({ mcp: { enabled: true, apiKeyFile: keyFile } }),
-      log: noopLog,
-      toolsService: makeToolsService({}),
-      writeJson,
-      readBody: (req) => Promise.resolve(req._body ? JSON.parse(req._body) : {}),
-    })
-    const req = fakeReq({ auth: key })
-    req._body = JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: '2025-03-26', capabilities: {}, clientInfo: { name: 't', version: '0' } } })
-    const res = fakeRes()
-    await route2.handler(req, res)
-        assert.ok([200, 503].includes(res.statusCode))
-    if (res.statusCode === 200) assert.ok(json(res).result)
-    if (res.statusCode === 503) assert.equal(json(res).error.code, -32000)
+  test('initialize → JSON-RPC result with serverInfo (real HTTP)', async () => {
+    const { status, json } = await post(route, { jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: '2025-03-26', capabilities: {}, clientInfo: { name: 't', version: '0' } } })
+    assert.equal(status, 200)
+    assert.equal(json.result.serverInfo.name, 'dsh-agents-in-the-loop')
+  })
+  test('tools/list returns exposed tools; pure notification → 202', async () => {
+    const { status, json } = await post(route, { jsonrpc: '2.0', id: 2, method: 'tools/list' })
+    assert.equal(status, 200)
+    assert.deepEqual(json.result.tools.map((t) => t.name), [])
+    const n = await post(route, { jsonrpc: '2.0', method: 'notifications/initialized' })
+    assert.equal(n.status, 202)
+  })
+  test('unknown method → -32601', async () => {
+    const { json } = await post(route, { jsonrpc: '2.0', id: 3, method: 'nope' })
+    assert.equal(json.error.code, -32601)
+  })
+  test('batch: request + notification → only the request answered', async () => {
+    const { json } = await post(route, [
+      { jsonrpc: '2.0', method: 'notifications/initialized' },
+      { jsonrpc: '2.0', id: 4, method: 'tools/list' },
+    ])
+    assert.ok(Array.isArray(json))
+    assert.equal(json.length, 1)
+    assert.equal(json[0].id, 4)
   })
 })
 
-// SDK-present integration tests run only where the SDK resolves (live profile).
-const sdkAvailable = await import('@modelcontextprotocol/sdk/server/index.js').then(() => true, () => false)
-if (sdkAvailable) {
-  test('tools/list over streamable-http returns exposed tools', async () => {
-    const { Client } = await import('@modelcontextprotocol/sdk/client/index.js')
-    const { StreamableHTTPClientTransport } = await import('@modelcontextprotocol/sdk/client/streamableHttp.js')
-    const { createServer } = await import('node:http')
-    const defs = {
-      contacts: {
-        name: 'contacts', description: 'd', parameters: { type: 'object', properties: { action: { type: 'string' } } },
-        execute: async () => ({ text: JSON.stringify({ ok: true, value: [] }) }),
-      },
-    }
-    const route = createMcpRouteLazy({
-      mcp: resolveMcpConfig({ mcp: { enabled: true, apiKeyFile: keyFile, tools: ['contacts'] } }),
-      log: noopLog,
-      toolsService: makeToolsService(defs),
-      writeJson: (res, status, body) => { res.writeHead(status, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(body)) },
-      readBody: (req) => new Promise((resolve) => { let d = ''; req.on('data', (c) => (d += c)); req.on('end', () => resolve(JSON.parse(d || '{}'))) }),
-    })
-    const server = createServer((req, res) => route.handler(req, res))
-    await new Promise((r) => server.listen(0, '127.0.0.1', r))
+// Real-HTTP helpers (no SDK): the handler is wired into a plain node http server.
+import { createServer } from 'node:http'
+async function post(route, body, { auth = null, addr = '127.0.0.1' } = {}) {
+  const server = createServer((req, res) => route.handler(req, res))
+  await new Promise((r) => server.listen(0, '127.0.0.1', r))
+  try {
     const port = server.address().port
-    const key = loadMcpKey(keyFile)
-    const client = new Client({ name: 'test', version: '0' })
-    const transport = new StreamableHTTPClientTransport(new URL(`http://127.0.0.1:${port}${route.path}`), { requestInit: { headers: { Authorization: `Bearer ${key}` } } })
-    await client.connect(transport)
-    const tools = await client.listTools()
-    assert.deepEqual(tools.tools.map((t) => t.name), ['contacts'])
-    const out = await client.callTool({ name: 'contacts', arguments: { action: 'list' } })
-    assert.equal(out.isError, undefined)
-    assert.match(out.content[0].text, /"ok":true/)
-    await client.close()
-    server.close()
-  })
-} else {
-  test('SDK not present in repo — integration tests skipped (live-only)', () => { assert.ok(true) })
+    const key = loadMcpKey(route.mcp?.apiKeyFile ?? keyFile)
+    const res = await fetch(`http://127.0.0.1:${port}${route.path}`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', ...(auth ?? key ? { authorization: `Bearer ${auth ?? key}` } : {}) },
+      body: JSON.stringify(body),
+      localAddress: addr === '::1' ? '::1' : undefined,
+    })
+    const text = await res.text()
+    return { status: res.status, json: text ? JSON.parse(text) : null }
+  } finally { server.close() }
 }
-
 
 describe('mcp internals (kill-switch + isError mapping, no SDK needed)', () => {
   const defs = {

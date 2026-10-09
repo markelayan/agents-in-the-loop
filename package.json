@@ -54,18 +54,6 @@
     "node": ">=20",
     "@deepseek-ai/dsh": ">=0.1.2"
   },
-  "peerDependencies": {
-    "@deepseek-ai/dsh": ">=0.1.2",
-    "@modelcontextprotocol/sdk": ">=1.0.0"
-  },
-  "peerDependenciesMeta": {
-    "@deepseek-ai/dsh": {
-      "optional": true
-    },
-    "@modelcontextprotocol/sdk": {
-      "optional": true
-    }
-  },
   "publishConfig": {
     "access": "public"
   },
