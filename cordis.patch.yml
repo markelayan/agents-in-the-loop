@@ -29,6 +29,16 @@
           allowNonLoopback: false
           tools: [contacts, session_message, spawn_session]
           allTools: true         # expose EVERY harness tool (full control) — Mark directive 2026-10-09
+          inbox:                # v1.10.0 maildrop + contacts-in-SQLite
+            enabled: true       # TESTING; flip false before npm release
+            file: ~/.dsh/aitl.db
+            maxChars: 8000
+            maxPending: 100
+            retentionDays: 7
+            redeliverAfterMin: 5
+            identityHeader: x-aitl-identity
+            panel:
+              enabled: true
           bridge:
             enabled: false      # phase 2 (harness tool bridging) — not implemented yet
             allowedTools: []
