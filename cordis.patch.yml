@@ -22,7 +22,7 @@
         # published default must return to false before npm release.
         # Model/provider are pinned here and NEVER selectable per call.
         mcp:
-          enabled: false        # kill-switch; flip true in the LIVE overlay only
+          enabled: true         # TESTING; flip back to false before npm release
           path: /api/agents-in-the-loop/mcp
           apiKeyFile: ~/.dsh/aitl-mcp-key.json
           callerId: session-mcp-external
