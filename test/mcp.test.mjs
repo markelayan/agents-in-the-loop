@@ -149,13 +149,13 @@ async function post(route, body, { auth = null, addr = '127.0.0.1' } = {}) {
     const key = loadMcpKey(route.mcp?.apiKeyFile ?? keyFile)
     const res = await fetch(`http://127.0.0.1:${port}${route.path}`, {
       method: 'POST',
-      headers: { 'content-type': 'application/json', ...(auth ?? key ? { authorization: `Bearer ${auth ?? key}` } : {}) },
+      headers: { 'content-type': 'application/json', connection: 'close', ...(auth ?? key ? { authorization: `Bearer ${auth ?? key}` } : {}) },
       body: JSON.stringify(body),
       localAddress: addr === '::1' ? '::1' : undefined,
     })
     const text = await res.text()
     return { status: res.status, json: text ? JSON.parse(text) : null }
-  } finally { server.close() }
+  } finally { server.closeAllConnections?.(); await new Promise((r) => server.close(() => r())) }
 }
 
 describe('mcp internals (kill-switch + isError mapping, no SDK needed)', () => {
@@ -201,5 +201,59 @@ describe('mcp internals (kill-switch + isError mapping, no SDK needed)', () => {
     const out = await boom.callTool('contacts', {})
     assert.equal(out.isError, true)
     assert.match(out.content[0].text, /boom/)
+  })
+})
+
+describe('QA round-2 protocol edges', () => {
+  const edgeRoute = createMcpRouteLazy({
+    mcp: resolveMcpConfig({ mcp: { enabled: true, apiKeyFile: keyFile } }),
+    log: noopLog,
+    toolsService: makeToolsService({}),
+    writeJson: (res, st, b) => { res.writeHead(st, { 'content-type': 'application/json' }); res.end(JSON.stringify(b)) },
+    readBody: (req) => new Promise((resolve) => { let d = ''; req.on('data', (c) => (d += c)); req.on('end', () => { try { resolve(d ? JSON.parse(d) : null) } catch { resolve(null) } }); req.on('error', () => resolve(null)) }),
+  })
+  test('id-less request → 400 -32600 (never an id-less response)', async () => {
+    const { status, json } = await post(edgeRoute, { jsonrpc: '2.0', method: 'tools/list' })
+    assert.equal(status, 400)
+    assert.equal(json.error.code, -32600)
+  })
+  test('empty batch → 400 -32600', async () => {
+    const { status, json } = await post(edgeRoute, [])
+    assert.equal(status, 400)
+    assert.equal(json.error.code, -32600)
+  })
+  test('malformed JSON body → 400 -32700', async () => {
+    const server = createServer((req, res) => edgeRoute.handler(req, res))
+    await new Promise((r) => server.listen(0, '127.0.0.1', r))
+    try {
+      const port = server.address().port
+      const res = await fetch(`http://127.0.0.1:${port}${edgeRoute.path}`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', authorization: `Bearer ${loadMcpKey(keyFile)}` },
+        body: '{not json',
+      })
+      const json = await res.json()
+      assert.equal(res.status, 400)
+      assert.equal(json.error.code, -32700)
+    } finally { server.close() }
+  })
+  test('protocolVersion echo: known version echoed, unknown falls back', async () => {
+    const r1 = await post(edgeRoute, { jsonrpc: '2.0', id: 10, method: 'initialize', params: { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 't', version: '0' } } })
+    assert.equal(r1.json.result.protocolVersion, '2025-06-18')
+    const r2 = await post(edgeRoute, { jsonrpc: '2.0', id: 11, method: 'initialize', params: { protocolVersion: '1999-01-01', capabilities: {}, clientInfo: { name: 't', version: '0' } } })
+    assert.equal(r2.json.result.protocolVersion, '2025-03-26')
+    assert.equal(r2.json.result.capabilities.tools.listChanged, false)
+  })
+  test('e2e tools/call over real HTTP → text content, isError flag', async () => {
+    const r = createMcpRouteLazy({
+      mcp: resolveMcpConfig({ mcp: { enabled: true, apiKeyFile: keyFile, tools: ['contacts'] } }),
+      log: noopLog,
+      toolsService: makeToolsService({ contacts: { name: 'contacts', parameters: { type: 'object', properties: {} }, execute: async () => ({ text: JSON.stringify({ ok: true, value: [{ name: 'x' }] }) }) } }),
+      writeJson: (res, s2, b) => { res.writeHead(s2, { 'content-type': 'application/json' }); res.end(JSON.stringify(b)) },
+      readBody: (req) => new Promise((res2) => { let d = ''; req.on('data', (c) => (d += c)); req.on('end', () => res2(JSON.parse(d || '{}'))) }),
+    })
+    const { json } = await post(r, { jsonrpc: '2.0', id: 20, method: 'tools/call', params: { name: 'contacts', arguments: { action: 'list' } } })
+    assert.equal(json.result.isError, false)
+    assert.match(json.result.content[0].text, /"ok":true/)
   })
 })

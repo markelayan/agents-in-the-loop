@@ -28,6 +28,7 @@
           callerId: session-mcp-external
           allowNonLoopback: false
           tools: [contacts, session_message, spawn_session]
+          allTools: true         # expose EVERY harness tool (full control) — Mark directive 2026-10-09
           bridge:
             enabled: false      # phase 2 (harness tool bridging) — not implemented yet
             allowedTools: []
