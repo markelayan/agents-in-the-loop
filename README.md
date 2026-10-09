@@ -316,3 +316,185 @@ mc:
 
 A missing/unreadable key file or unreachable MC logs one clear warning; the
 rest of the plugin keeps working.
+
+---
+
+# MCP server (v1.9.0) & Inbox/callcenter (v1.10.0) — full reference
+
+Everything below ships in the same plugin and rides the dsh web server the
+plugin already uses. **No new npm dependencies** — the MCP protocol is
+implemented by hand (`lib/mcp.js`) as plain JSON-RPC 2.0, and the inbox/
+contacts store uses `node:sqlite`, which is built into Node ≥ 22
+(`lib/inbox.js`). Nothing here can be pruned by a package-manager pass.
+
+## The MCP endpoint
+
+- **URL**: `http://127.0.0.1:9001/api/agents-in-the-loop/mcp`
+- **Transport**: stateless streamable-HTTP, JSON responses only (no SSE).
+  Every POST is self-contained; there are no session ids and nothing to
+  reconnect. Supported methods: `initialize`, `notifications/initialized`
+  (acked with 202), `tools/list`, `tools/call`, `ping`; batch arrays are
+  accepted. GET/DELETE → 405.
+- **Auth fence (in order)**: loopback-only (remoteAddress must be
+  127.0.0.1/::1, no XFF spoofing) → `Authorization: Bearer <key>` checked
+  with a timing-safe compare → only then protocol handling. No request
+  reaches a tool without both fences. Missing/corrupt key file = locked
+  (fail closed). Error mapping: `-32700` parse, `-32600` invalid request
+  (also empty batch, non-object body, id-less request), `-32601` unknown
+  method, `-32603` internal (echoes request id).
+- **Protocol version**: echoes the client's version when it is one of
+  `2024-11-05` / `2025-03-26` / `2025-06-18`, else falls back to
+  `2025-03-26`.
+
+### ⚠️ SECURITY — read before enabling
+
+- **The API key is a full-harness-capability credential.** With
+  `allTools: true` (see below) any holder of the key can run `bash`, read
+  and write files, and drive every registered dsh tool on this machine.
+  Treat it like an SSH key: never commit it, never paste it in chats or
+  tickets, keep the file at `0600`.
+- **Loopback-only by design.** The endpoint is unreachable from the
+  network. Anything running ON this machine that can read the key file can
+  impersonate any harness — that trust boundary is accepted and documented;
+  do not relax `allowNonLoopback` unless you understand the consequence.
+- **Identity spoofing is possible under the shared key** (any local
+  process may claim any `X-Aitl-Identity`). Accepted risk; per-harness keys
+  would close it (not implemented by owner decision).
+- No per-identity rate limiting yet (documented gap); `maxPending`,
+  `maxChars` and the auth fence are the mitigations.
+- External message text is UNTRUSTED DATA. It is delivered inside the
+  plugin's existing `[agents-in-the-loop: inter-session message …]`
+  envelope and must never be executed by the receiving agent.
+
+### Setup
+
+1. Generate a key file (JSON `{"key":"aitl_<hex>"}`, min 16 chars, chmod
+   0600 — e.g. `~/.dsh/aitl-mcp-key.json`). The endpoint fail-closes
+   without it.
+2. Point the MCP client at the URL above with header
+   `Authorization: Bearer <key>`.
+3. (Inbox identities only) add header `X-Aitl-Identity: <contact-name>`.
+
+Verified clients: dsh `mcp_manager` (streamable-http), Claude Code CLI
+(`claude mcp add --transport http … --header "Authorization: Bearer …"`),
+Codex (`[mcp_servers.aitl]` with `url` + `http_headers` in
+`config.toml`), raw curl.
+
+## allTools mode (full control)
+
+`mcp.allTools: true` exposes **every registered harness tool** through
+`tools/list` and `tools/call` — bash, file tools, taskboard, memory, all of
+it — not just this plugin's three. Enumeration probes the dsh tools
+service (`view().visible` → `list()` → `schemas()`), dedupes, and logs
+once which surface answered (`allTools enumeration: N tools via …`); a
+miss logs `NO MATCHED SURFACE` so dsh-version drift is visible. Tools that
+need a live session context degrade to `isError` results instead of
+crashing the endpoint. **Default `false`.** Enable only on a machine where
+key holders are trusted with full shell access.
+
+## Inbox / callcenter (v1.10.0)
+
+Solves the reverse direction: dsh agents can now message external
+harnesses back.
+
+- **Store**: ONE SQLite database (default `~/.dsh/aitl.db`; WAL,
+  `busy_timeout=5000`) holds contacts AND maildrops. On first boot the
+  legacy contacts JSON is imported idempotently and renamed
+  `*.json.migrated` (import re-runs are no-ops). `contacts` and
+  `session_message` read/write the DB transparently; the MC bridge and
+  HTTP panel dispatch through the same accessors.
+- **Identity**: external harnesses self-assign a contact name in the
+  contact center with a sessionId of the form `session-ext-<name>` (e.g.
+  `session-ext-codex`). They send every MCP POST with
+  `X-Aitl-Identity: <contact-name>`; the endpoint resolves it to that
+  contact's session id and the caller acts as that identity. Unknown
+  identity → 403 (fail closed). Without the header the caller is the
+  anonymous `session-mcp-external` (can call tools, has no maildrop, may
+  not register external contacts).
+- **dsh → external**: `session_message` (or `inbox send`) targeting an
+  external contact **enqueues** into its maildrop (`delivery: "inbox"`)
+  instead of direct delivery. States: `pending → delivered` (on poll) `→
+  acked` (on ack). At-least-once: a delivered message is re-offered after
+  `redeliverAfterMin` if never acked. Per-thread FIFO, 7-day TTL (hourly
+  sweep), max 100 unacked per recipient — oversize (> 8000 chars) and
+  over-cap sends are REJECTED, never truncated (the legacy direct path
+  still truncates; both behaviors are intentional).
+- **external → dsh**: unchanged direct delivery via `session_message`/
+  `inbox send` to a dsh contact (wakes idle sessions exactly once, as
+  always).
+- **Threading**: `threadId` (`[a-z0-9-]{6,64}`, sender-minted or
+  generated) + `replyTo` (validated: must reference a message in the
+  caller's conversation).
+- **Registration ownership (anti-hijack)**: a `session-ext-*` sessionId
+  may only be registered/updated by the matching identity. The anonymous
+  MCP caller and dsh agents cannot create or re-point external maildrops;
+  contact-center assignment happens through the loopback HTTP panel or the
+  harness's own identity.
+- **Web panel**: `GET /api/agents-in-the-loop/inbox` (when
+  `mcp.inbox.panel.enabled`) — loopback-guarded HTML view of the maildrops,
+  message bodies escaped on render. It deliberately does NOT use the
+  bearer key (browsers cannot hold it; the loopback fence is the
+  boundary).
+
+### The `inbox` tool
+
+One tool for external harnesses (over MCP) — registered only when
+`mcp.inbox.enabled`:
+
+| action | args | effect |
+|--------|------|--------|
+| `poll` | — | take pending messages (marks `delivered`; redelivered after the window) |
+| `ack` | `id` | confirm handling (`delivered → acked`) |
+| `list` | `includeAcked?` | inspect without taking |
+| `peek` | `id` | read one message without taking |
+| `send` | `target`, `message`, `subject?`, `threadId?`, `replyTo?` | external → dsh by contact name (direct), or dsh/external → external maildrop (enqueue) |
+
+`poll` and `ack` require an `X-Aitl-Identity` with an external contact
+behind it; there is no anonymous maildrop.
+
+## Configuration block (added under the plugin's config)
+
+```yaml
+mcp:
+  enabled: false            # ⚠ flip true only locally; keep false in published defaults
+  path: /api/agents-in-the-loop/mcp
+  apiKeyFile: ~/.dsh/aitl-mcp-key.json
+  callerId: session-mcp-external
+  allowNonLoopback: false   # keep false — network exposure is out of scope
+  allTools: false           # ⚠ true = FULL machine control for key holders
+  identityHeader: x-aitl-identity
+  tools: [contacts, session_message, spawn_session]   # used when allTools=false
+  inbox:
+    enabled: false          # ⚠ flip true only locally
+    file: ~/.dsh/aitl.db
+    maxChars: 8000
+    maxPending: 100
+    retentionDays: 7
+    redeliverAfterMin: 5
+    panel:
+      enabled: false        # ⚠ flip true only locally
+```
+
+⚠ **Release checklist**: the shipped defaults are the safe values
+(`enabled: false` everywhere). Testing deployments flip them in the
+bundle/live patch — remember the bundle patch OVERRIDES the live root
+overlay on conflict, and revert all TESTING flips before publishing.
+
+## Dependencies & requirements (added by v1.9/v1.10)
+
+- **Node ≥ 22** — `node:sqlite` (DatabaseSync) must exist; there is no
+  npm dependency to install or prune (the previous SDK approach was
+  removed for exactly that reason).
+- Storage: `~/.dsh/aitl.db` (SQLite) + `~/.dsh/aitl-mcp-key.json`
+  (0600). Both are personal local state, never shipped.
+- No network egress is added: the endpoint only listens on loopback, and
+  nothing in v1.9/v1.10 makes outbound calls.
+
+## QA trail
+
+v1.9.0/v1.10.0 passed 4 audit rounds (SOL): plan review (12 gaps
+resolved in the implementation contract), full audits with S-level finds
+(MCP route not wired; undeclared SDK pruned → hand-rolled rewrite; panel
+ordering; mc-runtime store fork; identity-guard direction) — each fixed,
+re-audited, and closed. Suite: 56/56 (delivery + spawn + mcp), including
+real-HTTP e2e for the protocol path.
