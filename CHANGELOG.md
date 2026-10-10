@@ -1,10 +1,10 @@
 # Changelog
 
-The latest public npm release before this candidate is `1.6.0`. Versions
+The previous public npm release was `1.6.0`. Versions
 `1.7.0` through `1.11.1` were internal development milestones consolidated
 into `2.0.0`. Full development records remain in Git history.
 
-## v2.0.0 — prepared for publication (2026-10-10, not published)
+## v2.0.0 (2026-10-10)
 
 ### Upgrade requirements
 - Node requires `^22.13.0 || >=23.4.0` for built-in SQLite without a flag.
@@ -42,8 +42,9 @@ into `2.0.0`. Full development records remain in Git history.
 - Separated taskboard Execute and auto-memory patches from this package;
   documented the self-MCP import hazard.
 - Added archive/default checks and a prepublication test/check hook.
-- Release candidate plugin suite: 114/114 tests passed. Live workspace, worker,
-  callback, inbox, and memory checks passed. Archive/default checks passed: 17 intended files, no bundled dependencies,
+- Plugin suite: 114/114 tests passed. Live workspace, worker,
+  callback, inbox, and memory checks passed. Archive/default checks passed:
+  17 intended files, no bundled dependencies,
   and all capability switches disabled. Independent Sol review passed.
 - Rendered UI QA and end-to-end Mission Control remain uncompleted and are
   disclosed in the README.
@@ -81,5 +82,5 @@ development added name-based targeting, self-registration, dead-session resume,
 prompt-template sanitization, and the send-only external HTTP route. Later
 internal `1.7.0`–`1.11.1` work introduced the optional MC bridge, spawning,
 MCP, inboxes, workspace identities, and UI refinements now released together
-as the prepared `2.0.0` candidate. Historical behavior is not a current API
+as the `2.0.0` release. Historical behavior is not a current API
 contract; use the README for current setup and tool semantics.

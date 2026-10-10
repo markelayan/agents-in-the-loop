@@ -6,7 +6,7 @@ This provides a shared operating context without requiring a separate Mission Co
 
 With full-tool exposure enabled, newly registered DSH tools become available through the endpoint without a separate adapter for each one. Clients may need to reconnect to discover changed schemas. Every added tool also expands what shared-key holders can do; read the security warnings before enabling this mode.
 
-**Release status:** `2.0.0` is prepared for publication; it is not yet published. The public npm version at preparation time is `1.6.0`. See [CHANGELOG.md](CHANGELOG.md) for upgrade changes.
+**Version:** `2.0.0`. Install the archive from the [GitHub release](https://github.com/markelayan/agents-in-the-loop/releases/tag/v2.0.0), or install from npm once that version has been published. See [CHANGELOG.md](CHANGELOG.md) for upgrade changes.
 
 All capability switches ship **disabled**. Installing the bundle does not enable messaging, spawning, MCP, inboxes, identities, or Mission Control. Configure only the capabilities you intend to use.
 
