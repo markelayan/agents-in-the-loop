@@ -13,7 +13,7 @@ const db = openStore(dbFile)
 describe('inbox store (SQLite)', () => {
   test('schema + WAL', () => {
     const v = db.prepare('SELECT value FROM meta WHERE key = ?').get('schema_version')
-    assert.equal(v.value, '2')
+    assert.equal(v.value, '3')
     const wm = db.prepare('PRAGMA journal_mode').get()
     assert.equal(wm.journal_mode, 'wal')
   })

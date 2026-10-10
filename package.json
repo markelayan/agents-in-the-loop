@@ -67,6 +67,6 @@
     "access": "public"
   },
   "scripts": {
-    "test": "node --test test/delivery.test.mjs test/spawn.test.mjs test/mcp.test.mjs test/inbox.test.mjs test/identity.test.mjs"
+    "test": "node --test test/delivery.test.mjs test/spawn.test.mjs test/mcp.test.mjs test/inbox.test.mjs test/identity.test.mjs test/workspace-identities.test.mjs test/client-identities.test.mjs"
   }
 }

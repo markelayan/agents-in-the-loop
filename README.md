@@ -452,6 +452,27 @@ One tool for external harnesses (over MCP) — registered only when
 `poll` and `ack` require an `X-Aitl-Identity` with an external contact
 behind it; there is no anonymous maildrop.
 
+### Workspace identities
+
+With the SQLite inbox enabled, enable `identities.enabled` in Config and
+use Contacts' **Provision workspace identity** form. Choose a new contact
+name, an explicit workspace, and an allowed permission. Existing contact
+names cannot be converted or overwritten. Enabling identities initializes
+their manager immediately; no plugin reload is needed for this toggle.
+
+The resulting contact has `identity: true` and a real DSH session ID. Set
+`X-Aitl-Identity` to its contact name to use that workspace-bound caller.
+Replies to this contact go to inbox rather than waking its hidden session;
+receive them using `poll`, `peek`, and `ack` with the returned message ID.
+Ordinary local sessions do not acquire mailboxes.
+
+SQLite schema v3 preserves `workspaceId`, `identityMeta`, and external kind.
+On upgrade it recovers workspace and permission from v2's generated
+provisioning notes, including generated orphan suffixes; manually edited
+notes may require explicit re-provisioning. Re-provision keeps the current
+workspace and permission unless an explicit replacement is supplied. Pending
+messages addressed to the previous session remain in that previous maildrop.
+
 ## Configuration block (added under the plugin's config)
 
 ```yaml
