@@ -399,12 +399,15 @@ can send worker calls through the anonymous external caller, losing their
 workspace and task execution ownership. Use the endpoint from external clients
 such as Codex; disable a self-connection through `mcp_manager_set_enabled`.
 
-The local auto-memory 3.2.11 compatibility patch is recorded in
+The local auto-memory 3.2.11 compatibility patch is recorded in the source checkout at
 `patches/dsh-auto-memory-explicit-recall.patch`. It keeps saved handoffs searchable
 when automatic handoff generation is disabled, without changing generation
-settings. This patch is separate from the AITL package and must be reapplied or
+settings. This patch is separate from the npm AITL package and must be reapplied or
 replaced with an upstream fix after updating auto-memory. Its focused check is
-`DSH_TEST_MEMORY_PACKAGE=<installed package> node --test test/auto-memory-recall.test.mjs`.
+`DSH_TEST_MEMORY_PACKAGE=<installed package> node --test test/auto-memory-recall.test.mjs`
+from the source checkout. Check applicability from the auto-memory package
+directory with `git apply --check --ignore-space-change --unidiff-zero <patch>`
+before applying it; the installed upstream source uses CRLF line endings.
 
 ## Inbox / callcenter (v1.10.0)
 

@@ -45,7 +45,14 @@
 ### Validation and release status
 - Native contact/context fixes: independent Sol QA PASS; plugin suite 114/114.
   Separate explicit handoff regression checks passed 3/3. Self-MCP loader
-  confirmed disabled with zero imported tools; native execution retest follows.
+  confirmed disabled with zero imported tools, including after restart.
+- Native card retest passed: correct worker workspace, dated log read,
+  handoff/all recall, native Contacts registration, structured execution report,
+  and inbox callback 19 with the real worker ID; polled, read, and acknowledged.
+  The existing card remains in review with all three checklist items complete.
+  Fresh external handoff write, both recall scopes, and exact-ID expansion passed.
+  Initial worker confusion with the separate Mission Control board was resolved
+  by an exact native-tool follow-up to the same session. Package dry-run: 16 files.
 - Dynamic selection update: independent QA PASS; complete plugin suite 112/112,
   including 28 UI checks, live-registry model validation, and missing preset refusal.
 - Callback fix: independent QA PASS and complete suite 112/112. A live worker
