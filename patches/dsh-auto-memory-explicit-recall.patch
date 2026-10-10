@@ -1,0 +1,26 @@
+--- a/lib/index.js
++++ b/lib/index.js
+@@ -4285,3 +4285,4 @@
+   async searchHandoffCorpus(terms, limit, p) {
+     const hits = []
+-    if (this.config.handoffEnabled === false) return hits
++    // Explicit retrieval remains available for saved artifacts when automatic
++    // handoff generation is disabled. Do not silently hide successful writes.
+@@ -8481,4 +8482,3 @@
+-      //  闸门口径: 白板是**产物层**, 归 `handoffEnabled` 管(关时既不写也不读, 见 buildContinueCarry 头注释);
+-      //  **不是** boardMode 渲染门 —— 故此处只判 handoffEnabled, 不判 boardMode(与 L5 判据同源)。
+-      const withHandoffL4 = (this.config || {}).handoffEnabled !== false
+-      if (withHandoffL4) {
++      // Explicit retrieval may read saved artifacts independently of the
++      // automatic handoff generation policy and board rendering mode.
++      if (p.handoffDir) {
+@@ -8745,3 +8745,3 @@
+-        if ((this.config || {}).handoffEnabled !== false) {
++        if (p.handoffDir) {
+           try {
+             semSources.push({ label: 'handoff/PLAN.md', path: p.planPath })
+@@ -8783,3 +8783,3 @@
+-    if ((this.config || {}).handoffEnabled !== false) {
++    if (p.handoffDir) {
+       if (p.planPath) sources.push({ label: 'handoff/PLAN.md', path: p.planPath })
+       const ledgerName = p.handoffDir ? await latestLedgerNamePre(p.handoffDir) : null

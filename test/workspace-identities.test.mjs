@@ -5,8 +5,19 @@ import { mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Readable } from 'node:stream'
-import { apply } from '../lib/index.js'
+import { apply, isContactSessionId } from '../lib/index.js'
 import { openStore, loadContactsFromDb, saveContactsToDb, enqueueMessage, pollInbox, peekMessage, ackMessage, hasInbox, migrateContactsFromJson } from '../lib/inbox.js'
+
+test('contact IDs use host registration and durable records without trusting unknown namespaces', () => {
+  const id = 'session-taskboard-9b049ac4-9881-45b0-a391-c03300f521c5'
+  const agents = new Map([[id, { id }]])
+  assert.equal(isContactSessionId(id, agents), true)
+  assert.equal(isContactSessionId('session-taskboard-unregistered', agents), false)
+  assert.equal(isContactSessionId('session-abcdef012345', agents), true)
+  agents.clear()
+  assert.equal(isContactSessionId(id, agents, { worker: { sessionId: id } }), true)
+  assert.equal(isContactSessionId('../unsafe', new Map([['../unsafe', {}]])), false)
+})
 
 test('v2 migration recovers workspace identities and supports durable replies', () => {
   const file = join(mkdtempSync(join(tmpdir(), 'aitl-v2-')), 'store.db')
@@ -167,6 +178,14 @@ test('runtime enablement, live provisioning policy and all reply paths work with
   assert.equal(creations[1].agentOptions.model, 'second')
   assert.equal(sessions.get(second.body.sessionId).permission, 'workspace-write')
   const callTool = async (name, args, sender) => JSON.parse((await tools.get(name).execute(args, { agent: { id: sender } })).text)
+  const workerId = 'session-taskboard-9b049ac4-9881-45b0-a391-c03300f521c5'
+  agents.set(workerId, { id: workerId, status: 'idle' })
+  assert.equal((await callTool('contacts', { action: 'add', name: 'board-worker' }, workerId)).ok, true)
+  assert.equal((await route('/api/agents-in-the-loop/contacts', 'POST', { name: 'board-alias', sessionId: workerId })).status, 200)
+  agents.delete(workerId)
+  assert.equal((await callTool('contacts', { action: 'update', name: 'board-worker', sessionId: workerId, label: 'offline' }, sid)).ok, true)
+  assert.equal((await route('/api/agents-in-the-loop/contacts', 'PUT', { name: 'board-alias', sessionId: workerId, label: 'offline' })).status, 200)
+  assert.equal((await callTool('contacts', { action: 'add', name: 'unknown-worker', sessionId: 'session-taskboard-unknown' }, sid)).ok, false)
   const rawTarget = await callTool('session_message', { action: 'send', target: sid, message: 'raw id' }, 'maintainer')
   assert.equal(rawTarget.ok, false)
   assert.match(rawTarget.error, /Raw session-id targets are disabled/)

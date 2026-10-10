@@ -3,6 +3,12 @@
 ## v1.11.1 — release candidate (2026-10-10, not published)
 
 ### Fixed
+- Contacts accept registered native worker IDs and preserve them offline;
+  legacy MCP workspace context is available under `exec.agent.session`.
+- Removed the local DSH self-MCP connection through the manager, restoring
+  native worker identity and workspace context. Documented the setup hazard.
+- Separate auto-memory 3.2.11 compatibility patch makes explicitly saved
+  handoffs searchable while automatic generation remains disabled.
 - `contacts.call` now routes session-backed identity and legacy external replies
   into the inbox, instead of waking the hidden session. It rejects empty/self
   sends and refuses external delivery when the inbox is disabled. Regression
@@ -37,6 +43,9 @@
   retention, provider costs, schema caching, and separate taskboard Execute patch.
 
 ### Validation and release status
+- Native contact/context fixes: independent Sol QA PASS; plugin suite 114/114.
+  Separate explicit handoff regression checks passed 3/3. Self-MCP loader
+  confirmed disabled with zero imported tools; native execution retest follows.
 - Dynamic selection update: independent QA PASS; complete plugin suite 112/112,
   including 28 UI checks, live-registry model validation, and missing preset refusal.
 - Callback fix: independent QA PASS and complete suite 112/112. A live worker

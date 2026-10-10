@@ -393,6 +393,19 @@ need a live session context degrade to `isError` results instead of
 crashing the endpoint. **Default `false`.** Enable only on a machine where
 key holders are trusted with full shell access.
 
+Do not register this endpoint as an MCP server inside the same DSH instance.
+DSH workers already have native tools. A self-connection duplicates tools and
+can send worker calls through the anonymous external caller, losing their
+workspace and task execution ownership. Use the endpoint from external clients
+such as Codex; disable a self-connection through `mcp_manager_set_enabled`.
+
+The local auto-memory 3.2.11 compatibility patch is recorded in
+`patches/dsh-auto-memory-explicit-recall.patch`. It keeps saved handoffs searchable
+when automatic handoff generation is disabled, without changing generation
+settings. This patch is separate from the AITL package and must be reapplied or
+replaced with an upstream fix after updating auto-memory. Its focused check is
+`DSH_TEST_MEMORY_PACKAGE=<installed package> node --test test/auto-memory-recall.test.mjs`.
+
 ## Inbox / callcenter (v1.10.0)
 
 Solves the reverse direction: dsh agents can now message external

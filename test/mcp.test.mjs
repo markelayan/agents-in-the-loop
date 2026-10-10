@@ -259,6 +259,19 @@ describe('QA round-2 protocol edges', () => {
 })
 
 describe('mcp allTools (phase 2 full control)', () => {
+  test('legacy identity workspace is available on both canonical execution paths', async () => {
+    let actual
+    const r = createMcpRouteLazy({
+      mcp: resolveMcpConfig({ mcp: { tools: ['workspace_check'] } }),
+      log: noopLog,
+      toolsService: makeToolsService({ workspace_check: { execute: async (_args, exec) => { actual = exec; return { text: 'ok' } } } }),
+      writeJson: () => {}, readBody: () => Promise.resolve({}),
+    })
+    await r._internals.callTool('workspace_check', {}, 'session-ext-check', '/workspaces/check')
+    assert.equal(actual.agent.id, 'session-ext-check')
+    assert.equal(actual.agent.session.header.cwd, '/workspaces/check')
+    assert.equal(actual.session, actual.agent.session)
+  })
   const harnessDefs = {
     bash: { name: 'bash', description: 'shell', parameters: { type: 'object', properties: { cmd: { type: 'string' } } }, execute: async () => ({ text: JSON.stringify({ ok: true, out: 'ran' }) }) },
     contacts: { name: 'contacts', description: 'd', parameters: { type: 'object', properties: {} }, execute: async () => ({ text: JSON.stringify({ ok: true, value: [] }) }) },
