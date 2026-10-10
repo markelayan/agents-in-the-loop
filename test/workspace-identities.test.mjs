@@ -61,6 +61,31 @@ test('SQLite and JSON import preserve identity metadata and deny ordinary local 
   assert.equal(pollInbox(db, { recipient: reloaded.worker.sessionId }).ok, false)
 })
 
+async function assertDisabledInboxResponse() {
+  const routes = new Map()
+  const ctx = {
+    get: () => undefined,
+    webServer: { register: (route) => { routes.set(route.path, route); return () => {} } },
+    inject: (_deps, callback) => callback({
+      workspaceRegistry: { list: () => [] },
+      inject: (_deps2, cb) => cb({ agents: { get: () => undefined, list: () => [] } }),
+    }),
+  }
+  apply(ctx, { contacts: { enabled: false }, sessionMessage: { enabled: false }, mcp: { inbox: { enabled: false } } })
+  const req = Readable.from([])
+  req.url = '/api/agents-in-the-loop/inbox?format=json'
+  req.method = 'GET'
+  req.socket = { remoteAddress: '127.0.0.1' }
+  let status, payload
+  await routes.get('/api/agents-in-the-loop/inbox').handler(req, {
+    writeHead: (code) => { status = code }, end: (data) => { payload = data },
+  })
+  assert.equal(status, 503)
+  assert.equal(JSON.parse(payload).code, 'inbox_disabled')
+}
+
+test('disabled inbox exposes a structured JSON response instead of a missing route', assertDisabledInboxResponse)
+
 test('runtime enablement, live provisioning policy and all reply paths work with the SQLite store', async (t) => {
   const dir = mkdtempSync(join(tmpdir(), 'aitl-host-'))
   const tools = new Map()
@@ -105,7 +130,7 @@ test('runtime enablement, live provisioning policy and all reply paths work with
     contacts: { file: join(dir, 'contacts.json') },
     spawn: { stateFile: join(dir, 'journal.jsonl'), provider: 'test-provider', model: 'first' },
     identities: { enabled: false, preset: 'identity' },
-    mcp: { inbox: { enabled: true, file: join(dir, 'store.db'), panel: { enabled: true } } },
+    mcp: { inbox: { enabled: true, file: join(dir, 'store.db'), panel: { enabled: false } } },
   })
   t.after(() => dispose?.())
   async function route(path, method = 'GET', body) {
@@ -120,8 +145,14 @@ test('runtime enablement, live provisioning policy and all reply paths work with
   }
   const configPath = '/api/agents-in-the-loop/config'
   const identitiesPath = '/api/agents-in-the-loop/identities'
+  // The JSON client API remains available when the standalone HTML panel is off.
+  assert.equal((await route('/api/agents-in-the-loop/inbox?format=json')).status, 200)
+  const disabledPanel = await route('/api/agents-in-the-loop/inbox')
+  assert.equal(disabledPanel.status, 503)
+  assert.equal(disabledPanel.body.code, 'inbox_panel_disabled')
   assert.equal((await route(identitiesPath)).status, 503)
   assert.equal((await route(configPath, 'POST', { path: 'identities.enabled', value: true })).status, 200)
+  assert.equal((await route(configPath, 'POST', { path: 'mcp.inbox.enabled', value: false })).status, 409)
   assert.equal((await route(identitiesPath)).status, 200)
   const first = await route(identitiesPath, 'POST', { name: 'codex', workspaceId: 'ws-1' })
   assert.equal(first.status, 200, JSON.stringify(first.body))
@@ -167,4 +198,6 @@ test('runtime enablement, live provisioning policy and all reply paths work with
   assert.equal((await route(identitiesPath)).status, 503)
   assert.equal((await route(configPath, 'DELETE', { path: 'identities.enabled' })).status, 200)
   assert.equal((await route(identitiesPath)).status, 503, 'clearing override restores disabled boot policy')
+  // Reloading a disabled instance cannot reuse the module's previous open store.
+  await assertDisabledInboxResponse()
 })
