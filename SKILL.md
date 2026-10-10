@@ -74,11 +74,33 @@ contacts { "action": "remove", "name": "reviewer" }
 - Self-registration needs the NAME ONLY: `add` with no `sessionId`
   registers the calling session automatically — never research your own
   session id first.
-- Entries live in a local JSON store
-  (`~/.dsh/taskboard-flow-contacts.json` by default): personal state,
+- Entries live in SQLite when inbox is enabled (`~/.dsh/aitl.db` by default),
+  otherwise the legacy local JSON contacts store: personal state,
   add/edit/delete at runtime, no config edit or restart. Kill-switch:
   `contacts.enabled: false`.
 - Names: lowercase `[a-z0-9._-]`, ≤64 chars.
+
+## External workspace identities and replies
+
+The owner provisions an identity in the Identities panel with a workspace,
+installed preset, and allowed permission. Use its contact name in the
+`X-Aitl-Identity` MCP header. Verify native `memory_status` reports the intended
+workspace before reading project notes or invoking task tools. Memory tools
+do not take a workspace-selection argument. Legacy `session-ext-*` contacts
+are maildrops, not workspace-backed sessions.
+
+Replies to identities enqueue into inbox without waking their hidden sessions.
+Receive through `inbox` only: `poll`, then `peek` the returned `id`, then `ack`
+after handling. Match sender and correlation text to the expected worker.
+Delivery is at least once; handle duplicates. Drain replies before re-provision
+or disposal because the new session does not inherit the old maildrop.
+Shared-key holders can impersonate identities; identity naming is not proof
+of independent authentication. See the README security warnings.
+
+`taskboard_execute`, when installed through the separate patched taskboard,
+starts its native pipeline. Read the card first and use its current `ifVersion`;
+do not confuse claiming with starting a worker. Reconnect MCP clients after
+tool-schema changes.
 
 ## Messaging etiquette
 
