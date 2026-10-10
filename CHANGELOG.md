@@ -6,6 +6,7 @@
 - Contact editor rename and clearing workspace/label/tags/note; workspace choices
   now persist through the API and arbitrary unregistered paths are rejected.
 - Legacy external contact input validation matches the server's bounded ID format.
+- Ordinary idle/busy sessions display as live instead of offline.
 - SQLite schema v3 persists workspace and identity metadata; recovers generated
   legacy provisioning notes and preserves bindings during re-provision.
 - Identity replies route into inbox across delivery paths; ordinary sessions
@@ -25,6 +26,9 @@
   retention, provider costs, schema caching, and separate taskboard Execute patch.
 
 ### Validation and release status
+- UI selector/contact regressions: 21/21; catalog and contact API regressions: 4/4.
+- Live catalog returned 11 configured models, 19 presets, and 10 workspaces with
+  no registry errors. Independent review passed; rendered browser QA unavailable.
 - Independent Sol review passed; plugin suite: 87/87.
 - Live Codex selected the project memory and polled/read/acked worker replies.
 - Separate taskboard patch: seven targeted tests and one successful native

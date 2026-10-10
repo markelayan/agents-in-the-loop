@@ -74,6 +74,15 @@ function contactsResponse({ path, method }) {
 }
 const props = { notify() {}, reloadSessions() {}, globalQuery: '', sessions: [], mode: 'identities' }
 
+test('ordinary idle and busy sessions are shown live instead of offline', async () => {
+  for (const status of ['idle', 'busy']) {
+    const ui = harness((request) => request.path === '/contacts'
+      ? { body: { contacts: [{ name: 'worker', sessionId: 'session-worker' }] } } : contactsResponse(request))
+    const tree = await ui.initialize(ui.contacts, { ...props, mode: 'contacts', sessions: [{ id: 'session-worker', status }] })
+    assert.equal(ui.find(tree, (n) => n.type?.name === 'LiveBadge')[0].props.online, true)
+  }
+})
+
 test('real-session identity displays workspace and uses lifecycle controls', async () => {
   const ui = harness(contactsResponse)
   const tree = await ui.initialize(ui.contacts, props)
