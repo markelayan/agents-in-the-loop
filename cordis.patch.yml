@@ -53,7 +53,7 @@
         identities:            # v1.11 session-backed external identities
           enabled: false       # published default; TESTING deployments flip true in the LIVE overlay
           maxIdentities: 8
-          model: ''            # '' = spawn pair default
+          model: ''            # optional hidden identity-session model; set its provider alongside it
           allowedPermissions: [read-only]
         # DSH-MC-1 — Mission Control runtime (SSE → spawn/deliver/close).
         # Key file: JSON {"key":"mca_…"}; never logged, never printed.

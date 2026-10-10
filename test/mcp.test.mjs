@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { resolveMcpConfig, loadMcpKey, verifyMcpAuth, isLoopback, createMcpRouteLazy } from '../lib/mcp.js'
 import { isLoopbackAddr } from '../lib/mcp-auth.js'
+import { VERSION } from '../lib/version.js'
 
 const tmp = mkdtempSync(join(tmpdir(), 'aitl-mcp-'))
 const keyFile = join(tmp, 'aitl-mcp-key.json')
@@ -116,6 +117,7 @@ describe('mcp route guards (no SDK needed)', () => {
     const { status, json } = await post(route, { jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: '2025-03-26', capabilities: {}, clientInfo: { name: 't', version: '0' } } })
     assert.equal(status, 200)
     assert.equal(json.result.serverInfo.name, 'dsh-agents-in-the-loop')
+    assert.equal(json.result.serverInfo.version, VERSION)
   })
   test('tools/list returns exposed tools; pure notification → 202', async () => {
     const { status, json } = await post(route, { jsonrpc: '2.0', id: 2, method: 'tools/list' })

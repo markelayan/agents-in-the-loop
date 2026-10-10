@@ -1,624 +1,291 @@
-# dsh-agents-in-the-loop
+# DSH Agents in the Loop
 
-Maintained by Mark Elayan with AI-assisted implementation and independent
-review. See [CHANGELOG.md](./CHANGELOG.md) for changes and validation limits.
+Use [DeepSeek Harness (DSH)](https://github.com/deepseek-ai/deepseek-harness) as the control center for Claude Code, Codex, and other external agents. Agents in the Loop gives an external client a workspace-backed DSH session identity, access to DSH tools over MCP, and an inbox for replies. Claude Code can act as the main orchestrator while DSH runs other agents and keeps its native task, workspace, and tool services together.
 
-**Cross-session call center for [DeepSeek Harness (DSH)](https://github.com/deepseek-ai)
-agents.** Named messaging, persistent spawning, authenticated MCP access,
-external poll/ack inboxes, and workspace identities backed by real DSH
-sessions. The web panel has Contacts, Inbox, Identities, and Config views.
+This provides a shared operating context without requiring a separate Mission Control application. External agents continue running in their own clients; the hidden DSH session supplies identity and workspace context. The integration includes named contacts, messaging, persistent workers, and a Web sidebar with system-backed provider/model/preset/workspace/permission selectors.
 
-Formerly **taskboard-flow** — the kanban trigger/triage/task engine was
-removed in v1.0.0. Native task execution belongs to the separate
-`dsh-taskboard` plugin; this plugin can expose its tools through MCP.
+With full-tool exposure enabled, newly registered DSH tools become available through the endpoint without a separate adapter for each one. Clients may need to reconnect to discover changed schemas. Every added tool also expands what shared-key holders can do; read the security warnings before enabling this mode.
 
-## Features at a glance
+**Release status:** `2.0.0` is prepared for publication; it is not yet published. The public npm version at preparation time is `1.6.0`. See [CHANGELOG.md](CHANGELOG.md) for upgrade changes.
 
-- **`session_message`** — list live sessions; deliver a message to any
-  registered contact (by NAME — raw session ids are rejected since v1.4.2).
-- **`contacts`** — a named directory over session ids: resolve an alias to
-  session id + label + LIVE status in one call, message it, manage entries
-  at runtime (add / update / rename / remove, no config edit, no restart).
-- **External message HTTP API** (v1.5.0) — `POST
-  /api/agents-in-the-loop/message`: loopback curl from any outside agent.
-  External replies use the authenticated MCP inbox described below.
-- **Contacts HTTP API** — `GET/POST/PUT/DELETE
-  /api/agents-in-the-loop/contacts` + `GET /sessions` for a client panel.
-- **`spawn_session`** (v1.8.0, `spawn.enabled`, default OFF) — spawn a NEW
-  persistent dsh session in-process (no external scripts, no MC required):
-  caller-selected provider/model/preset/permission, registered workspace, seat cap,
-  contacts registration, first message delivered. Spawned sessions are
-  persistent co-workers reachable by name via `session_message`/`contacts`.
-- **State-aware delivery engine** (shared by all paths): every
-  message lands exactly once — idle target gets the full text rendered
-  visibly into its conversation; busy target gets a mid-turn-safe visible
-  notice; optional `resumeIfDead` resurrects dead sessions.
-
-## How delivery works
-
-All sends (tools and HTTP) go through one delivery engine:
-
-| Target state | What happens | Result fields |
-|---|---|---|
-| **idle** + wake | full text rendered into the target conversation (steer, fallback followup) | `delivery: wake-steer` (or `wake-followup`), `nudgeVia` |
-| **busy**, or `wake: false` | full text queued with `agent.inject()` as a visible plugin-source notice for the target's next step — mid-turn safe, starts no turn | `delivery: notice`, `noticeInjected: true` |
-
-Harness physics: main GUI sessions start turns on user input, so an idle
-wake renders the message but does not force a turn — the agent reads it at
-its next turn from conversation history.
-
-**Context hygiene (v1.6.0).** Each message is delivered exactly **once** as
-an ordinary conversation message, so normal compaction can summarize it
-away. Messages are capped at **8000 chars** (truncated with a note — send
-long reports as a file path) and end with a one-line hint telling the
-compaction summarizer to keep only sender + gist. The pre-1.6 runtime-context
-note channel (`systemPrompt.context()`) is gone: on dsh 0.2 every change to
-runtime-context text is materialized as a new full snapshot message in
-history, so the 5-note / 30-min buffer re-copied every buffered message on
-each delivery and each expiry — the context bloat that compaction could not
-remove.
-
-**`resumeIfDead: true`** (opt-in) resurrects a dead target via
-`AgentRegistry.resume` before delivering; the resumed agent gets the
-deployment-default model selection (a resumed agent must carry a model
-route or its wake turn fails on the `{{model}}` prompt variable). Self-send
-is always refused. Status is read exactly once per send (mid-send
-idle→busy flips previously produced contradictory results).
-
-**Targeting law (v1.4.2):** `session_message send` accepts ONLY a
-registered contact name as `target` — resolved against the live contacts
-store at call time, so a re-raised agent re-registered under the same name
-is always reached. A raw `session-…` id is rejected with an error pointing
-at `session_message`/`contacts` action `"list"`. `contacts call` is and
-always was name-based.
-
-## The `session_message` tool
-
-```
-session_message { action: "list" }                     → live sessions [{id,status,contact?}]
-session_message { action: "send", target, message,     → deliver
-                  wake?, resumeIfDead? }
-```
-
-- `target` — registered contact name (required for send).
-- `list` annotates each live session with its registered `contact` name;
-  successful sends report `resolvedFrom: <contact>`.
-- `wake` defaults to true; `resumeIfDead` defaults to false.
-
-## The `contacts` tool
-
-```
-contacts { action: "list" }                                → every contact + live status + store file
-contacts { action: "get", name }                           → one contact + status
-contacts { action: "call", name, message, wake?, resumeIfDead? } → message via the delivery engine
-contacts { action: "add", name, sessionId?, label?, tags?, note? }
-contacts { action: "update", name, sessionId?, label?, tags?, note?, rename? }
-contacts { action: "remove", name }
-```
-
-- **Self-registration needs the NAME ONLY**: `add` with no `sessionId`
-  (or `"self"`) registers the CALLING session automatically — never
-  research your own session id. An explicit id registers another session.
-- Names: lowercase `[a-z0-9._-]`, ≤64 chars.
-- `add` on a not-currently-live session still saves the contact and
-  returns a `warn` — `resumeIfDead` can reach it later.
-- Records carry `label`, `tags`, `note`, `createdAt`, `updatedAt`, and a
-  computed live `status` (`idle` / `running` / … / `dead`).
-
-## The `spawn_session` tool (v1.8.0 — default OFF)
-
-Spawns a NEW persistent dsh session the way the Mission Control bridge does,
-but fully in-process (host `agents.create` + `agentPresets` resolve/mount +
-`workspaces` — the same faces dsh-taskboard uses for scheduled executions):
-
-- Discover current choices with `aitl_catalog {}`. It projects the host's
-  providers/models, model-specific reasoning efforts, presets, workspaces, and
-  permission presets without returning credentials or preset prompts.
-- Required args: `name`, `message`, `provider`, `model`, `preset`, `permission`.
-  Optional: `reasoningEffort`, `workspaceId`, and `wake` (default true).
-  Each call validates its exact selections against the current host registries.
-  Unsupported selections fail before creation; there is no model substitution.
-- A supplied workspace must be registered and satisfy any owner allowlist.
-  Omission uses the caller's bound workspace; an ungrouped caller must select one.
-  Permission and preset selections still respect owner policies and seat limits.
-- Retired `spawn.provider`, `spawn.model`, `spawn.reasoningEffort`,
-  `spawn.allowedModels`, and `spawn.preset` settings no longer pin calls and
-  cannot be saved through Config. Remove old profile keys when convenient.
-  This changes the spawn call schema; reconnect MCP clients that cache schemas.
-  The response returns separate `provider` and `model` IDs.
-- Preset is resolved BEFORE creation and mounted in `setup` — a session
-  without a resolvable preset is refused, never spawned as a bare shell.
-- Seat cap counts live sessions registered in the contacts store
-  (`spawn.maxSessions`); every spawn appends a line to the JSONL journal
-  (`spawn.stateFile`) for audit.
-- Missing faces degrade loudly: no `agentPresets` → refuse; no
-  `permissionPresets` → reject the permission arg; missing rename/attach
-  are skipped as cosmetic.
-- Spawned sessions are PERSISTENT peers (deliberately registered in
-  contacts, reachable by name) — distinct from 1-shot `subagent` children,
-  which must never enter the directory.
-
-## External agents (send-only HTTP API)
-
-Agents outside dsh (Claude Code, scripts) can **send** messages to any
-registered contact over loopback HTTP. They never register, never appear
-in the contacts store, and never receive messages. `resumeIfDead` is
-hard-wired `false`: a dead session is refused (409), never resurrected.
-
-```bash
-curl -s http://127.0.0.1:9001/api/agents-in-the-loop/message \
-  -H 'Content-Type: application/json' \
-  -d '{"from":"claude-code","contact":"dev-lead","message":"task done"}'
-```
-
-- `from` — free-form sender label (default `external-agent`, truncated to
-  64 chars), shown as `From <from>:` in the target conversation.
-- Delivery is identical to the `session_message` tool.
-
-| Status | Meaning |
-|---|---|
-| 200 | delivered — `{ok, contact, from, nudgeVia, noticeInjected}` |
-| 400 | invalid JSON / invalid contact name / empty message |
-| 403 | not loopback (`forbidden: loopback-only`) |
-| 404 | unknown contact |
-| 405 | method not allowed (POST only) |
-| 409 | delivery refused (e.g. target session dead) |
-
-## Contacts panel HTTP API
-
-Same loopback fence, same JSON conventions:
-
-- `GET /api/agents-in-the-loop/sessions` — live sessions `[{id,status}]`.
-- `GET /api/agents-in-the-loop/contacts` — every contact + live status.
-- `POST …/contacts` — create; body `{name, sessionId, label?, tags?, note?}`.
-- `PUT …/contacts` — update; body `{name, sessionId?, label?, tags?, note?, rename?}`.
-- `DELETE …/contacts?name=<name>` — remove.
-
-Errors: 400 invalid input, 404 unknown contact, 405 wrong method,
-409 name/rename collision, 500 persist failure.
-
-## Install
-
-```bash
-dsh plugin --profile web add link:/path/to/agents-in-the-loop   # or: npm i dsh-agents-in-the-loop
-```
-
-Then add the plugin row to your profile's cordis composition patch (see
-`cordis.patch.yml` in this repo for the shape) and **restart `dsh web`**.
-
-## Configuration
-
-One row (all keys optional, defaults shown):
-
-```yaml
-- insert:
-    - id: dsh-agents-in-the-loop
-      name: dsh-agents-in-the-loop
-      config:
-        enabled: true
-        sessionMessage:
-          enabled: true      # kill-switch for the session_message tool
-        contacts:
-          enabled: true      # kill-switch for the contacts tool
-          # file: '~/.dsh/taskboard-flow-contacts.json'   # default store
-        spawn:
-          enabled: false          # kill-switch for the spawn_session tool
-          maxSessions: 9          # seat cap over the contacts store
-          allowedPresets: []      # empty = any resolvable preset
-          workspaces: []          # empty removes explicit workspace allowlist; omitted arg uses caller
-          allowedPermissions: [read-only]
-          stateFile: '~/.dsh/spawned-sessions.json'  # JSONL audit journal
-```
-
-The contacts store defaults to `~/.dsh/taskboard-flow-contacts.json` — the
-historical taskboard-flow path, so contacts created before the rename keep
-working. Atomic tmp+rename writes; personal state, never shipped. A `~/`
-prefix in a custom path expands. Contact CRUD via the HTTP API and the
-`contacts` tool write the same store — no config edit or restart needed
-for directory changes.
-
-## Permissions, external services & failure bounds
-
-Disclosed capability surface (this plugin is intentionally privileged):
-
-- **Filesystem**: reads and writes exactly ONE file — the contacts store
-  above. No other filesystem access.
-- **Network**: registers loopback HTTP routes on the dsh web server
-  (`127.0.0.1:9001`, custom fence rejects non-loopback peers with 403).
-  The external send-only API accepts inbound loopback POSTs; no outbound
-  network calls are ever made.
-- **Process**: no subprocess/shell execution, no child processes.
-- **Credentials**: none read, stored, or transmitted. No secrets.
-- **External services**: none. Zero runtime dependencies, zero lifecycle
-  scripts (`preinstall`/`install`/`postinstall`/`prepare`).
-- **Audit trail**: action logs go to `console.log` (dsh's `ctx.logger`
-  output never reaches `~/.dsh/dsh-web.log` — verified 2026-08-28).
-- **Failure bounds**: if the dsh core APIs the plugin injects into change
-  shape, the plugin logs the failure and degrades to inert — it never
-  blocks session composition or other plugins. The external message route
-  refuses (409) rather than resurrecting dead sessions.
-
-## Compatibility
-
-- **DSH `>=0.1.2`** (hard floor): `resumeIfDead` relies on
-  `agents.resume({ resumeSessionId })`, introduced in dsh 0.1.2. Declared
-  in `package.json` via `engines` (v1.10 requires Node ≥ 22 for `node:sqlite`), and in
-  `dsh.compatibility.dshReleases` (the DSH-Store catalog matrix):
-  `0.1.2`, `0.1.6-alpha.1`, `0.1.7-rc.2` / `0.2.0-rc.2` — each verified compatible.
-- **Node `>=20`**.
-
-No web UI, no database, no background polling — the plugin is inert until
-an agent calls a tool or an HTTP route is hit.
-
-## Data & cleanup notes
-
-- `~/.dsh/taskboard-flow-contacts.json` — the contacts store (kept).
-- `~/.dsh/taskboard-flow-state.json` — the old dispatch-state file; the
-  v1.0.0+ plugin never reads it and it can be deleted.
+All capability switches ship **disabled**. Installing the bundle does not enable messaging, spawning, MCP, inboxes, identities, or Mission Control. Configure only the capabilities you intend to use.
 
 ## Requirements
 
-- A running **dsh web** deployment (dsh ≥ 0.1.2).
-- No other dependencies; dsh-taskboard is NOT required.
+- DSH Web profile. This release is verified against **DSH `0.2.0-rc.2`**; other versions have not been validated for this release. DSH is a developer preview whose APIs can change.
+- Node **22.13.0 or later in the 22.x line, or 23.4.0 and later**. The plugin imports built-in [`node:sqlite`](https://nodejs.org/api/sqlite.html); earlier Node versions need a flag or lack the module. This requirement applies even with inboxes disabled.
+- Registered host providers/models, presets, and workspaces for features that use them. Provider authentication belongs to DSH.
 
-## License
+There are no npm runtime dependencies and no install scripts. The plugin runs inside DSH and uses its existing Web server. SQLite is built into Node. Enabled workers can incur provider costs; the optional Mission Control bridge also makes network requests and launches a user-supplied script.
 
-MIT
+### Integration dependencies
 
-## Mission Control integration (optional, v1.7.0)
+| Component | When required |
+|---|---|
+| DSH Web server and native session/tool registries | Always; this is a DSH plugin, not a standalone control center |
+| External client with streamable-HTTP MCP and configurable request headers | For Claude Code, Codex, or another external orchestrator |
+| Built-in Node SQLite and writable local state directory | Inbox, identity metadata, and runtime overrides; SQLite module support is required at import |
+| Installed DSH preset, registered workspace, and permission registry | Workspace-backed identities and spawned workers |
+| Configured DSH provider/model with its supported authentication | Workers that invoke models; the external client keeps its own authentication |
+| Native memory/taskboard or other DSH tool plugins | Only for the services those plugins provide; AITL exposes them rather than reimplementing them |
+| Separate Mission Control server, key, templates, and spawn script | Only for the optional legacy MC bridge; unnecessary for DSH-centered orchestration |
 
-Optional bridge that lets a Mission Control (MC) API drive dsh agent
-sessions. **OFF by default** — the plugin behaves exactly as v1.6.0 unless
-`mc.enabled: true` is set in the plugin config. When off: no SSE connection,
-no spawn, and `/api/agents-in-the-loop/mc-health` answers `{"ok":true,"enabled":false}`.
+### Subscription and authentication boundaries
 
-When enabled it:
+The external client keeps its own supported login and subscription. AITL does not extract or proxy subscription credentials, convert a subscription into an API key, or bypass provider limits. A hidden DSH identity is session context, not a new provider entitlement. DSH workers use the provider integrations and authentication configured in DSH; they do not inherit the external client's subscription simply because that client started them.
 
-- spawns a dsh session (via `~/.dsh/new-session.mjs`) when an MC task is
-  assigned to an agent whose config has `runtime: "dsh"` (model/provider are
-  assigned ONLY at spawn; MC agent config overrides the mc block);
-- delivers MC task comments and review-rejects into the session;
-- closes the session and frees its seat when the task reaches done/failed/deleted;
-- enforces seats (`maxSessions`), priority ordering, and `metadata.after`
-  dependencies; reminds silent sessions (2 reminders, then a BLOCKED comment);
-- reconciles on startup/reconnect (no duplicate sessions) and posts loud
-  `dsh-runtime · BLOCKED · spawn failed: …` comments (max 3 tries).
+Use only provider-supported interfaces and authentication, and review the current terms for each client/provider. See the official [Claude Code authentication guide](https://code.claude.com/docs/en/authentication) and [Codex authentication guide](https://developers.openai.com/codex/auth) for supported login methods. This plugin does not certify that a particular orchestration, automation, or subscription setup is permitted. API billing, subscription usage limits, and account permissions remain separate from plugin seat caps.
 
-Config keys (plugin config → `mc`):
+## Install and enable
 
-| key | type | default | notes |
-|---|---|---|---|
-| `enabled` | boolean | `false` | master switch |
-| `url` | string | `http://127.0.0.1:9999` | MC API base |
-| `apiKeyFile` | string | — | path to JSON `{"key": "…"}`; required when enabled |
-| `maxSessions` | int | `9` | seat cap |
-| `silentMinutes` | int | `20` | reminder threshold |
-| `excludedContacts` | string[] | `["dsh-maintainer"]` | excluded from seat count |
-| `provider` / `model` | string | empty | optional bridge defaults; assigned agent selection takes precedence; missing pair refuses dispatch |
-| `newSession` | string | `~/.dsh/new-session.mjs` | spawner path |
-| `stateFile` | string | `~/.dsh/mc-runtime-state.json` | journal |
-| `projects.<slug>.workspaceId` | string | — | MC project → dsh workspace |
-| `projects.<slug>.firstMessage` | string | — | template path ({TICKET} {TITLE} {SESSION} {TASK_ID} {PROJECT} {ROLE} {RULES}) |
-| `projects.<slug>.rules` | string | — | appended RULES text |
+For the prepared local archive:
 
-Minimal example:
-
-```yaml
-mc:
-  enabled: true
-  url: 'http://127.0.0.1:9999'
-  apiKeyFile: '/path/to/.dsh-runtime-key.json'
-  projects:
-    sandbox:
-      workspaceId: '<workspace-uuid>'
-      firstMessage: '/path/to/first-message.txt'
-      rules: 'TEST task: MC tools only.'
+```sh
+dsh plugin --profile web add /absolute/path/dsh-agents-in-the-loop-2.0.0.tgz
 ```
 
-A missing/unreadable key file or unreachable MC logs one clear warning; the
-rest of the plugin keeps working.
+After `2.0.0` has been published:
 
----
+```sh
+dsh plugin --profile web add dsh-agents-in-the-loop@2.0.0
+```
 
-# MCP server (v1.9.0) & Inbox/callcenter (v1.10.0) — full reference
+You can also install through DSH's **Plugins** page. Installation selects the bundle automatically; do not insert a duplicate plugin row. Consult the [DSH documentation](https://deepseek-harness.github.io/deepseek-harness/) for profile management.
 
-Everything below ships in the same plugin and rides the dsh web server the
-plugin already uses. **No new npm dependencies** — the MCP protocol is
-implemented by hand (`lib/mcp.js`) as plain JSON-RPC 2.0, and the inbox/
-contacts store uses `node:sqlite`, which is built into Node ≥ 22
-(`lib/inbox.js`). Nothing here can be pruned by a package-manager pass.
+The shipped defaults are [cordis.patch.yml](cordis.patch.yml). Add an owner-controlled override to the Web profile's `cordis.patch.yml`, matching the plugin ID:
 
-## The MCP endpoint
+```yaml
+- override:
+    - id: dsh-agents-in-the-loop
+      config:
+        enabled: true
+        sessionMessage:
+          enabled: true
+        contacts:
+          enabled: true
+```
 
-- **URL**: `http://127.0.0.1:9001/api/agents-in-the-loop/mcp`
-- **Transport**: stateless streamable-HTTP, JSON responses only (no SSE).
-  Every POST is self-contained; there are no session ids and nothing to
-  reconnect. Supported methods: `initialize`, `notifications/initialized`
-  (acked with 202), `tools/list`, `tools/call`, `ping`; batch arrays are
-  accepted. GET/DELETE → 405.
-- **Auth fence (in order)**: loopback-only (remoteAddress must be
-  127.0.0.1/::1, no XFF spoofing) → `Authorization: Bearer <key>` checked
-  with a timing-safe compare → only then protocol handling. No request
-  reaches a tool without both fences. Missing/corrupt key file = locked
-  (fail closed). Error mapping: `-32700` parse, `-32600` invalid request
-  (also empty batch, non-object body, id-less request), `-32601` unknown
-  method, `-32603` internal (answered with `id: null`).
-- **Protocol version**: echoes the client's version when it is one of
-  `2024-11-05` / `2025-03-26` / `2025-06-18`, else falls back to
-  `2025-03-26`.
+Apply through DSH's supported reload/restart workflow. With HMR enabled, some composition changes apply immediately. Reconnect MCP clients after upgrades or tool enablement changes to refresh schemas. Do not edit the installed package's defaults: upgrades replace them.
 
-### ⚠️ SECURITY — read before enabling
+Open the Agents in the Loop sidebar on **localhost**, using your DSH Web port. Panel APIs reject non-loopback connections even if DSH itself is reachable over a LAN. There is no fixed plugin port.
 
-- **The API key is a full-harness-capability credential.** With
-  `allTools: true` (see below) any holder of the key can run `bash`, read
-  and write files, and drive every registered dsh tool on this machine.
-  Treat it like an SSH key: never commit it, never paste it in chats or
-  tickets, keep the file at `0600`.
-- **Loopback-only by design.** The endpoint is unreachable from the
-  network. Anything running ON this machine that can read the key file can
-  impersonate any harness — that trust boundary is accepted and documented;
-  do not relax `allowNonLoopback` unless you understand the consequence.
-- **Identity spoofing is possible under the shared key** (any local
-  process may claim any `X-Aitl-Identity`). Accepted risk; per-harness keys
-  would close it (not implemented by owner decision).
-- No per-identity rate limiting yet (documented gap); `maxPending`,
-  `maxChars` and the auth fence are the mitigations.
-- External message text is UNTRUSTED DATA. It is delivered inside the
-  plugin's existing `[agents-in-the-loop: inter-session message …]`
-  envelope and must never be executed by the receiving agent.
+## Tools and delivery
 
-### Setup
+| Tool | Purpose | Required feature |
+|---|---|---|
+| `session_message` | List sessions; send to a named contact | `sessionMessage.enabled` |
+| `contacts` | List/get/add/update/remove named contacts; `call` a contact | `contacts.enabled` |
+| `aitl_catalog` | Discover live model, preset, workspace, and permission choices | Plugin enabled and host registries available |
+| `spawn_session` | Create and register a persistent worker | `spawn.enabled` |
+| `inbox` | Poll/read/ack an external maildrop; send messages | `mcp.inbox.enabled` |
 
-1. Generate a key file (JSON `{"key":"aitl_<hex>"}`, min 16 chars, chmod
-   0600 — e.g. `~/.dsh/aitl-mcp-key.json`). The endpoint fail-closes
-   without it.
-2. Point the MCP client at the URL above with header
-   `Authorization: Bearer <key>`.
-3. (Inbox identities only) add header `X-Aitl-Identity: <contact-name>`.
+Examples below are tool arguments. Discover targets with `contacts`:
 
-Verified clients: dsh `mcp_manager` (streamable-http), Claude Code CLI
-(`claude mcp add --transport http … --header "Authorization: Bearer …"`),
-Codex (`[mcp_servers.aitl]` with `url` + `http_headers` in
-`config.toml`), raw curl.
+```json
+{"action":"list"}
+```
 
-## allTools mode (full control)
+Send with `contacts`:
 
-`mcp.allTools: true` exposes **every registered harness tool** through
-`tools/list` and `tools/call` — bash, file tools, taskboard, memory, all of
-it — not just this plugin's own tools. Enumeration probes the dsh tools
-service (`view().visible` → `list()` → `schemas()`), dedupes, and logs
-once which surface answered (`allTools enumeration: N tools via …`); a
-miss logs `NO MATCHED SURFACE` so dsh-version drift is visible. Tools that
-need a live session context degrade to `isError` results instead of
-crashing the endpoint. **Default `false`.** Enable only on a machine where
-key holders are trusted with full shell access.
+```json
+{"action":"call","name":"reviewer","message":"Review the attached change and reply with the verdict."}
+```
 
-Do not register this endpoint as an MCP server inside the same DSH instance.
-DSH workers already have native tools. A self-connection duplicates tools and
-can send worker calls through the anonymous external caller, losing their
-workspace and task execution ownership. Use the endpoint from external clients
-such as Codex; disable a self-connection through `mcp_manager_set_enabled`.
+Register your native session with `contacts`:
 
-The local auto-memory 3.2.11 compatibility patch is recorded in the source checkout at
-`patches/dsh-auto-memory-explicit-recall.patch`. It keeps saved handoffs searchable
-when automatic handoff generation is disabled, without changing generation
-settings. This patch is separate from the npm AITL package and must be reapplied or
-replaced with an upstream fix after updating auto-memory. Its focused check is
-`DSH_TEST_MEMORY_PACKAGE=<installed package> node --test test/auto-memory-recall.test.mjs`
-from the source checkout. Check applicability from the auto-memory package
-directory with `git apply --check --ignore-space-change --unidiff-zero <patch>`
-before applying it; the installed upstream source uses CRLF line endings.
+```json
+{"action":"add","name":"reviewer","label":"Code review"}
+```
 
-## Inbox / callcenter (v1.10.0)
+Omitting `sessionId` registers the caller. Registered native worker IDs and existing durable contact IDs are supported; discover actual IDs instead of guessing their format. Contact names use lowercase `[a-z0-9._-]`, up to 64 characters. `session_message.send` requires a contact name rather than a raw session ID. The panel/HTTP contact API validates optional `cwd` against registered workspace paths; the native contacts tool accepts absolute paths without that registry check. Contact metadata does not rebind a session-backed identity.
 
-Solves the reverse direction: dsh agents can now message external
-harnesses back.
+Idle sessions receive visible messages through a wake; busy sessions receive a visible notice. `wake` defaults to true; `resumeIfDead` defaults to false. A successful send means delivery was accepted, **not task completion**. Retrying sends can duplicate messages. Direct messages over the configured cap are truncated with a note; oversized inbox messages are rejected. Self-send is refused.
 
-- **Store**: ONE SQLite database (default `~/.dsh/aitl.db`; WAL,
-  `busy_timeout=5000`) holds contacts AND maildrops. On first boot the
-  legacy contacts JSON is imported idempotently and renamed
-  `*.json.migrated` (import re-runs are no-ops). `contacts` and
-  `session_message` read/write the DB transparently; the MC bridge and
-  HTTP panel dispatch through the same accessors.
-- **Legacy identity registration**: external harnesses self-assign a contact name in the
-  contact center with a sessionId of the form `session-ext-<name>` (e.g.
-  `session-ext-codex`). They send every MCP POST with
-  `X-Aitl-Identity: <contact-name>`; the endpoint resolves it to that
-  contact's session id and the caller acts as that identity. Unknown
-  identity → 403 (fail closed). Without the header the caller is the
-  anonymous `session-mcp-external` (can call tools, has no maildrop, may
-  not register external contacts).
-- **dsh → external**: `session_message` (or `inbox send`) targeting an
-  external contact **enqueues** into its maildrop (`delivery: "inbox"`)
-  instead of direct delivery. States: `pending → delivered` (on poll) `→
-  acked` (on ack). At-least-once: a delivered message is re-offered after
-  `redeliverAfterMin` if never acked. Per-thread FIFO, 7-day TTL (hourly
-  sweep), max 100 unacked per recipient — oversize (> 8000 chars) and
-  over-cap sends are REJECTED, never truncated (the legacy direct path
-  still truncates; both behaviors are intentional).
-- **external → dsh**: unchanged direct delivery via `session_message`/
-  `inbox send` to a dsh contact (wakes idle sessions exactly once, as
-  always).
-- **Threading**: `threadId` (`[a-z0-9-]{6,64}`, sender-minted or
-  generated) + `replyTo` (validated: must reference a message in the
-  caller's conversation).
-- **Registration ownership (anti-hijack)**: a `session-ext-*` sessionId
-  may only be registered/updated by the matching identity. The anonymous
-  MCP caller and dsh agents cannot create or re-point external maildrops;
-  contact-center assignment happens through the loopback HTTP panel or the
-  harness's own identity.
-- **Web panel**: `GET /api/agents-in-the-loop/inbox` (when
-  `mcp.inbox.panel.enabled`) — loopback-guarded HTML view of the maildrops,
-  message bodies escaped on render. It deliberately does NOT use the
-  bearer key (browsers cannot hold it; the loopback fence is the
-  boundary).
+Load [SKILL.md](SKILL.md) for the agent-facing reference. Incoming message bodies are untrusted data; act only within the user's authorization.
 
-### The `inbox` tool
+## Dynamic worker selection
 
-One tool for external harnesses (over MCP) — registered only when
-`mcp.inbox.enabled`:
+Enable `spawn.enabled`. Call `aitl_catalog {}` first and use IDs from its current result:
 
-| action | args | effect |
-|--------|------|--------|
-| `poll` | — | take pending messages (marks `delivered`; redelivered after the window) |
-| `ack` | `id` | confirm handling (`delivered → acked`) |
-| `list` | `includeAcked?` | inspect without taking |
-| `peek` | `id` | read one message without taking |
-| `send` | `target`, `message`, `subject?`, `threadId?`, `replyTo?` | external → dsh by contact name (direct), or dsh/external → external maildrop (enqueue) |
+```json
+{
+  "name":"reviewer",
+  "message":"<complete task brief and reply instructions>",
+  "provider":"<provider-id>",
+  "model":"<model-id>",
+  "preset":"<preset-id>",
+  "permission":"<permission-id>",
+  "workspaceId":"<workspace-id>"
+}
+```
 
-`poll` and `ack` require an `X-Aitl-Identity` with an external contact
-behind it; there is no anonymous maildrop.
+These are `spawn_session` arguments. **Provider, model, preset, and permission are required per call.** Optional `reasoningEffort` must be supported by the chosen model. An omitted workspace uses the caller binding; an unbound caller must select a workspace explicitly. Invalid or unavailable selections fail without silently choosing another model or workspace.
 
-### Workspace identities
+The worker is a persistent DSH session, automatically registered under `name`, with `message` as its first brief. It is not a one-shot subagent. Owner policies enforce allowed presets, workspaces, permissions, and seat limits. Empty preset/workspace allowlists permit registered choices; they do not create registry entries.
 
-With the SQLite inbox enabled, enable `identities.enabled` in Config, set
-`identities.preset` to an installed preset, and use the **Identities** tab's
-provisioning form. Choose a new contact
-name, an explicit workspace, and an allowed permission. Existing contact
-names cannot be converted or overwritten. Enabling identities initializes
-their manager immediately; no plugin reload is needed for this toggle.
+The UI uses the same live catalog. Missing registries and saved unavailable selections appear explicitly. Configure providers/workspaces in DSH first, then refresh.
 
-The resulting contact has `identity: true` and a real DSH session ID. Set
-`X-Aitl-Identity` to its contact name to use that workspace-bound caller.
-Replies to this contact go to inbox rather than waking its hidden session;
-receive them using `poll`, `peek`, and `ack` with the returned message ID.
-Ordinary local sessions do not acquire mailboxes.
+Retired `spawn.provider`, `spawn.model`, `spawn.reasoningEffort`, `spawn.allowedModels`, and `spawn.preset` settings no longer choose worker models. The Config API rejects these keys. Move selections into each call. Legacy spawn selection keys can still supply hidden identity-session fallbacks; migrate those settings to `identities.*` before removing old overrides.
 
-The panel requires an explicit configured, installed preset before provision
-or re-provision. There is no built-in preset fallback. Missing presets fail
-provisioning. Choose from your deployment's preset registry. Permissions default to
-`read-only`, which does not isolate holders of the shared bearer credential.
+## External MCP clients and workspace identities
 
-Verify selection with native `memory_status`: it must report the intended
-workspace path before reading project notes or running workspace tools. Memory
-tools have no workspace-selection argument; the identity session supplies it.
-Legacy `session-ext-*` maildrops have no real workspace session and do not
-provide this guarantee. Use owner provisioning rather than repointing contacts.
+Enable `mcp.enabled`, `mcp.inbox.enabled`, and `identities.enabled`. Set `identities.preset` explicitly to an installed preset and review `identities.allowedPermissions` (published default: read-only). Choose the identity workspace and permission in the **Identities** panel. Provisioning fails for missing registry choices and never overwrites an existing contact name.
 
-SQLite schema v3 preserves `workspaceId`, `identityMeta`, and external kind.
-On upgrade it recovers workspace and permission from v2's generated
-provisioning notes, including generated orphan suffixes; manually edited
-notes may require explicit re-provisioning. Re-provision keeps the current
-workspace and permission unless an explicit replacement is supplied. Pending
-messages addressed to the previous session remain in that previous maildrop.
-
-Drain and acknowledge replies before re-provisioning or disposal. Pending
-replies are not transferred to the replacement session. Back up the database
-consistently before migration, including SQLite WAL state; copying only a live
-`.db` file is insufficient. Schema upgrades are not a supported downgrade path.
-
-### Inbox diagnostics
-
-`GET /api/agents-in-the-loop/inbox?format=json` remains registered when inbox
-is disabled and returns structured HTTP 503 with `code: inbox_disabled`.
-Enable `mcp.inbox.enabled` and restart the host. The HTML panel switch controls
-the HTML view, not the JSON route. Plain-text errors from older hosts are
-displayed as readable errors instead of being parsed blindly as JSON.
-
-### Native taskboard execution
-
-`taskboard_execute` belongs to a separate local patch of `dsh-taskboard` 0.8.7;
-it is not bundled into AITL or the upstream 0.8.7 release. With that patch loaded
-and MCP tool exposure configured, read the card and comments, then call with
-`id`, current `ifVersion`, and optional `reuseWorktree` (board Resume semantics).
-The caller must belong to the card's workspace; the card must be unblocked
-`todo`. The native pipeline uses the card's model, preset, permission, and
-isolation and returns execution and worker session IDs.
-
-`todo` is the execution eligibility marker, not proof of separate human
-approval: agents can create todo cards. Claiming with `taskboard_move` alone
-does not start this pipeline. After a timeout, inspect execution history before
-retrying a start to avoid duplicate work. Reconnect clients after tool changes;
-clients can cache schemas even though the MCP transport is stateless.
-
-## Configuration block (added under the plugin's config)
+Owner override additions:
 
 ```yaml
 mcp:
-  enabled: false            # ⚠ flip true only locally; keep false in published defaults
-  path: /api/agents-in-the-loop/mcp
-  apiKeyFile: ~/.dsh/aitl-mcp-key.json
-  callerId: session-mcp-external
-  allowNonLoopback: false   # keep false — network exposure is out of scope
-  allTools: false           # ⚠ true = FULL machine control for key holders
-  identityHeader: x-aitl-identity
-  tools: [contacts, session_message, aitl_catalog, spawn_session]   # used when allTools=false
+  enabled: true
+  apiKeyFile: '~/.dsh/aitl-mcp-key.json'
+  allowNonLoopback: false
+  allTools: false
+  tools: [contacts, session_message, aitl_catalog, spawn_session, inbox]
   inbox:
-    enabled: false          # ⚠ flip true only locally
-    file: ~/.dsh/aitl.db
-    maxChars: 8000
-    maxPending: 100
-    retentionDays: 7
-    redeliverAfterMin: 5
-    panel:
-      enabled: false        # ⚠ flip true only locally
-```
-
-Identity configuration (under the same plugin config):
-
-```yaml
+    enabled: true
 identities:
-  enabled: false
-  preset: ''                 # configure an installed preset locally
-  maxIdentities: 8
-  model: ''                  # follows the configured spawn model pair
+  enabled: true
+  preset: '<installed-preset-id>'
   allowedPermissions: [read-only]
 ```
 
-The shipped capability switches remain false. Use an id-targeted profile patch
-supported by your DSH loader; a nested `patch`/`modify` wrapper may be ignored.
-Profile config replacement can be shallow: preserve the full intended config
-rather than assuming nested merging. Verify effective config after reload.
-`identities.enabled` initializes its manager at runtime, but changing
-`mcp.inbox.enabled` requires a host restart. Never ship your local profile,
-credentials, session IDs, or enabled testing overrides.
+Merge these keys into the plugin's `config` block alongside the basic settings. `spawn.enabled` enables the public spawn tool; identity provisioning uses the internal creator. Optional `identities.provider`, `identities.model`, and `identities.reasoningEffort` configure the hidden context session independently of worker selections. Without an explicit pair, the preset supplies its model configuration.
 
-## Dependencies & requirements (added by v1.9/v1.10)
+The owner creates a private JSON key file containing a `key` string of at least 16 characters, using a cryptographically random value and restrictive permissions (for example, `0600`). Keep it out of source control and separate from the Mission Control key. Missing/unreadable keys lock the endpoint.
 
-- **Node ≥ 22** — `node:sqlite` (DatabaseSync) must exist; there is no
-  npm dependency to install or prune (the previous SDK approach was
-  removed for exactly that reason).
-- Storage: `~/.dsh/aitl.db` (SQLite) + `~/.dsh/aitl-mcp-key.json`
-  (0600). Both are personal local state, never shipped.
-- No network egress is added: the endpoint only listens on loopback, and
-  nothing in v1.9/v1.10 makes outbound calls.
+Connect the external client using streamable HTTP:
 
-## Release checks and known limits
+| Setting | Value |
+|---|---|
+| URL | `http://127.0.0.1:<dsh-port>/api/agents-in-the-loop/mcp` |
+| Authorization header | `Authorization: Bearer <private-key>` |
+| Identity header | `X-Aitl-Identity: <provisioned-contact-name>` |
 
-The Config panel loads available models, providers, presets, and workspaces
-from DSH's registries via the read-only `/api/agents-in-the-loop/catalog` API.
-Choose registered entries rather than typing IDs. Refresh after changing host
-providers or presets. Unavailable saved values remain visible for diagnosis;
-registry errors do not silently substitute defaults.
+Unknown identities fail closed. Without the identity header, the caller is `session-mcp-external` and has no maildrop or workspace-backed identity. Older `session-ext-*` contacts remain maildrops but do not provide workspace-backed sessions.
 
-- Use a current Node 22 release with `node:sqlite` available, or newer Node.
-  The engine minimum alone does not ensure an early Node 22 has this module.
-- Keep MCP loopback-only and behind its bearer key. Owner panel APIs rely on
-  loopback, not that bearer header. Reverse proxies or `allowNonLoopback` can
-  defeat this boundary; public exposure needs separate authentication.
-- Shared-key holders can impersonate any identity. Workspace and permission
-  bindings are operating constraints, not tenant isolation or per-user auth.
-- Inbox bodies, contacts, and notes persist locally and may contain sensitive
-  task content. Restrict access, set retention, and exclude runtime data from
-  packages and source control. Direct messages truncate at their cap; oversized
-  inbox sends reject. Inbox delivery is at least once: handle duplicates and ack
-  only after handling. TTL expiry can remove unhandled replies.
-- Delivery success does not prove task completion. Spawning and task execution
-  may invoke configured model providers and incur charges. Enabled MC makes
-  outbound calls; local storage does not mean all task content stays on-device.
-- Back up state before upgrades. Inspect `npm pack --dry-run --json` from a clean
-  checkout and keep packaged capability switches off. Use a new package version
-  for publication. Package updates can overwrite local taskboard patches.
-- Compatibility declarations cover listed DSH releases, not every future host.
-  The reviewed candidate passed 87 plugin tests; the separate Execute patch
-  passed seven targeted tests and a live worker-to-inbox test. These do not
-  validate arbitrary models, presets, or public network exposure.
+Workspace selection is the provisioned identity's binding, not a `memory_status` argument. To change it, drain replies, re-provision through the owner panel/API, and reconnect. A new session is created before replacing the old binding; queued replies do not transfer to its maildrop.
 
-## QA trail
+To expose selected native memory/taskboard tools, add their exact registered names to `mcp.tools` and keep `mcp.allTools: false`. Discover those names in DSH first; the default list contains plugin tools only. For automatic exposure of **every registered harness tool**, including newly installed ones, use `mcp.allTools: true`; in that mode the configured list does not restrict access. `mcp.bridge` is reserved and unimplemented. Inspect `tools/list` after reconnecting.
 
-v1.9.0/v1.10.0 passed 4 audit rounds (SOL): plan review (12 gaps
-resolved in the implementation contract), full audits with S-level finds
-(MCP route not wired; undeclared SDK pruned → hand-rolled rewrite; panel
-ordering; mc-runtime store fork; identity-guard direction) — each fixed,
-re-audited, and closed. Suite: 56/56 (delivery + spawn + mcp), including
-real-HTTP e2e for the protocol path.
+Verify native `memory_status` reports the intended workspace before reading notes/logs or using project tools. AITL supplies caller context; memory storage and semantics belong to the installed memory plugin. Do not substitute another memory system to claim verification.
+
+### Receive replies through inbox
+
+Replies sent to the identity through `contacts.call`, `session_message`, or `inbox.send` enqueue without waking the hidden session. Call:
+
+```json
+{"action":"poll"}
+```
+
+Then `peek` the **actual returned numeric ID**, handle the message, and `ack` that same ID:
+
+```json
+{"action":"peek","id":42}
+```
+
+```json
+{"action":"ack","id":42}
+```
+
+The number is illustrative; never acknowledge a guessed ID. Verify sender and correlation text. `list`/`peek` inspect without taking messages. Delivery is **at least once**: unacknowledged deliveries are offered again after the redelivery window. Make handlers idempotent.
+
+Published limits: 8,000 characters per inbox message, 100 unacknowledged messages per recipient, five-minute redelivery, seven-day retention with an hourly sweep. Oversized/over-capacity sends fail. Expired messages are removed, including unacknowledged ones. Optional `subject`, `threadId`, and `replyTo` support conversations.
+
+## Taskboard and memory boundaries
+
+This package does **not** install or modify `dsh-taskboard`, `dsh-auto-memory`, or `dsh-mcp-client`.
+
+- `taskboard_execute` belongs to a separate patched taskboard installation. Read the card and current `ifVersion` before executing it. Execution starts the native pipeline and uses the board's model configuration; claiming alone does not start a worker. The Mission Control board is a separate system.
+- Explicit handoff recall with automatic generation disabled was verified using a separate patch for `@a9i5k4/dsh-auto-memory` **3.2.11**. The source checkout contains `patches/dsh-auto-memory-explicit-recall.patch`; it is **excluded from this npm package**. It changes explicit retrieval guards without enabling generation. Review the exact installed version and diff first: upstream uses CRLF and the patch requires whitespace-aware, zero-context application. Its focused test is `test/auto-memory-recall.test.mjs`, with `DSH_TEST_MEMORY_PACKAGE` selecting the installed package.
+
+Without those patches, inspect native schemas and behavior instead of assuming these extensions are included.
+
+**Do not import DSH's own AITL endpoint through its MCP manager.** Internal sessions should use native tools. A self-connection can create recursive aliases and generic external identities that lose native workspace context. Disable an existing self-connection through the manager; external clients may keep using the endpoint.
+
+## Configuration and local data
+
+The owner composition controls boot settings. With SQLite enabled, the Config panel stores runtime overrides in the database, taking precedence over composition values. Clear stale overrides when a composition edit appears ineffective. Boot-only changes return `restart required` and must use the profile composition and supported reload/restart flow.
+
+| Block | Main controls | Published state |
+|---|---|---|
+| Root | `enabled` | Off |
+| `sessionMessage` | Enablement, message cap | Off; 8,000 characters |
+| `contacts` | Enablement, legacy file | Off |
+| `spawn` | Enablement, seats, preset/workspace/permission policies, journal | Off; 9 seats; read-only/workspace-write |
+| `mcp` | Enablement, path/key, tool list, full exposure, network fence, identity header | Off; restricted tools; loopback |
+| `mcp.inbox` | Enablement, database, size/retention/redelivery limits, HTML panel | Off, including HTML panel |
+| `identities` | Enablement, explicit preset, optional model pair, seats, permission policy | Off; 8 identities; read-only |
+| `mc` | Enablement, server/key/script, project mappings, seats, optional model pair | Off |
+
+Default paths under `~/.dsh`:
+
+| File | Purpose |
+|---|---|
+| `taskboard-flow-contacts.json` | Legacy contacts with inbox off |
+| `aitl.db` and WAL/SHM companions | Contacts, inbox bodies, identities, overrides |
+| `spawned-sessions.json` | Append-only JSONL spawn journal despite extension |
+| `mc-runtime-state.json` | Optional Mission Control state |
+| `aitl-mcp-key.json`, `mc-runtime-key.json` | Separate owner-supplied credentials |
+
+SQLite imports legacy contacts idempotently and renames the source to `*.json.migrated`. Schema v3 retains workspace/identity metadata. Back up consistently, including WAL handling, before upgrading; preserve the legacy source and journals. Old releases do not understand the new schema: automatic downgrade/reverse migration is unsupported.
+
+Disabling/removing the plugin does not erase data, credentials, journals, or DSH sessions. Drain replies and dispose unused sessions through supported controls before removal. Manual data cleanup is the owner's responsibility; never delete an open database.
+
+### Optional Mission Control bridge
+
+Enable `mc.enabled` only with an available server, private `mc.apiKeyFile`, explicit `mc.projects` workspace mappings/first-message template paths, and a working `mc.newSession` script. The default script is `~/.dsh/new-session.mjs`; **it is not bundled**.
+
+The bridge uses outbound HTTP/SSE, dispatches assigned tasks, forwards comments, reconciles state, applies seat/dependency limits, and closes sessions for terminal tasks. Assigned agent provider/model choices take precedence over optional `mc.provider`/`mc.model` defaults; missing/unavailable pairs refuse dispatch. Validation runs through the configured script. See `lib/mc-runtime.js` for configuration and `/api/agents-in-the-loop/mc-health` for status.
+
+## Security and operational warnings
+
+- **Host access:** DSH plugin code executes in-process with the host user's access, outside the workspace sandbox. A worker's permission does not sandbox the plugin.
+- **Shared-key impersonation:** key holders can claim any configured identity header. Identity names are workspace routing, not independent authentication. There are no per-identity keys or rate limits.
+- **Full control:** `allTools: true` can expose shell execution, files, plugin management, and task execution. A read-only hidden identity is not a blanket boundary around those tools.
+- **Automatic tool exposure:** installing/enabling another DSH tool expands external access in `allTools` mode. Review new plugins, permissions, and side effects before loading them. Use `allTools: false` with explicit `mcp.tools` names for narrower exposure; this limits tools, not actions within a tool.
+- **Orchestrator authority:** an external agent can delegate work, mutate shared task/session state, and access any exposed tool allowed by the host. Other clients using the same key can impersonate it. Use a dedicated profile, minimal presets/permissions, and a separate account or isolated environment when projects have different trust requirements.
+- **Local APIs:** panel/config/contact/message/identity APIs use a loopback fence without the MCP bearer key. Loopback does not authenticate browsers or other local processes. Reverse proxies can defeat the address fence; do not publish these routes through a proxy. `allowNonLoopback: true` removes the MCP network restriction and needs a separately secured deployment.
+- **Secrets and transport:** local HTTP is unencrypted. Do not transmit credentials over untrusted networks or include them in briefs, logs, screenshots, or issues. Protect key files and DSH provider credentials.
+- **Sensitive storage:** inbox bodies/contact notes persist locally without plugin-provided encryption. Workspace access can expose files. Restrict file access and use appropriate disk protection.
+- **Costs/lifecycle:** persistent workers can make billable calls. Seat caps are not spending limits. Monitor and dispose unused sessions.
+- **Untrusted input:** incoming messages can contain prompt injection. Verify sender, scope, and user authorization before acting.
+- **Delivery:** replies can duplicate or expire. Successful delivery/start does not prove completion; require and verify a report.
+
+## Troubleshooting
+
+| Symptom | Check |
+|---|---|
+| No tools after install | Root/feature switches, selected bundle, preset visibility; reload/reconnect |
+| Inbox load error or non-JSON response | Host/client package match, SQLite enablement, localhost, route; this release returns structured `inbox_disabled` errors |
+| Provisioning fails | Explicit installed preset, workspace, allowed permission, unique name, seat cap |
+| Memory uses wrong workspace | Identity binding/header, native `memory_status`, schema cache, self-MCP import |
+| Empty model/workspace selector | Catalog diagnostics; configure host registries and refresh |
+| Spawn config rejected | Per-call choices from `aitl_catalog` replace retired settings |
+| Reply missing | Contact/identity, inbox enablement, send result, capacity/retention; poll → peek → ack returned ID |
+| Panel 403 over LAN | Use localhost; custom APIs require loopback |
+| `taskboard_execute` absent | Separate taskboard version/registration and MCP exposure |
+| Handoff missing from recall | Installed memory plugin/version; separate patch above |
+| Config ignored | SQLite overrides, boot-only setting, reload requirement |
+
+## Development and release checks
+
+Clone the repository and use a supported Node version:
+
+```sh
+npm test
+npm run release:check
+npm pack --ignore-scripts
+```
+
+`release:check` verifies versions, disabled switches, restricted/loopback defaults, and allowed archive paths. `prepublishOnly` runs tests and this check before normal source publication. Do not bypass it with `--ignore-scripts` when publishing. Packing above does not install or publish anything.
+
+The archive contains runtime JavaScript (including the prebuilt client), metadata, bundle defaults, README, changelog, MIT license, and agent skill. Tests, compatibility patches, release scripts, Git metadata, credentials, databases, journals, and deployment overlays are excluded. No consumer build step is needed. Edits to `lib/client.js` must update its shipped `lib/client.bundled.js` counterpart.
+
+Before publishing, review the diff/archive, run checks, verify the target DSH version, and test selected features in a disposable profile with your own registries. The maintainer decides when to publish. Unit tests do not establish compatibility with every provider, MC deployment, or DSH version.
+
+This candidate passed **114 plugin tests** and independent Sol code review. Live external/native checks verified workspace memory, dynamic spawning, native taskboard execution, contact callbacks, and inbox poll/read/ack. The separate memory patch passed three focused checks. Rendered browser QA was not completed; UI verification covers source-level selector/contact regressions. The optional MC bridge was not tested end to end in this release run.
+
+Report bugs through [GitHub Issues](https://github.com/markelayan/agents-in-the-loop/issues) with plugin/DSH/Node versions, enabled features, reproduction steps, and sanitized diagnostics. Remove credentials, private paths, and message bodies. Contributions should include focused regressions and documentation for changed behavior.
+
+## License
+
+[MIT](LICENSE).

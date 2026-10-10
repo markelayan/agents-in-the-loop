@@ -63,7 +63,8 @@ session_message { "action": "send", "target": "advisor", "message": "…" }
   a dead target session first). Self-send is refused.
 - Delivery: an IDLE target's wake carries the FULL text visibly into its
   conversation; a BUSY target gets a mid-turn-safe visible notice. Each
-  message lands exactly once. Keep messages short (8000-char cap) — put
+  call uses one delivery path; retrying a call can duplicate it. Acceptance
+  does not prove task completion. Keep messages short (8000-char cap) — put
   long reports in a file and send the path.
 
 ### contacts
@@ -96,6 +97,9 @@ contacts { "action": "remove", "name": "reviewer" }
   add/edit/delete at runtime, no config edit or restart. Kill-switch:
   `contacts.enabled: false`.
 - Names: lowercase `[a-z0-9._-]`, ≤64 chars.
+- Registered native worker IDs are accepted; discover real IDs rather than
+  inventing aliases or guessing UUIDs. The panel/HTTP API requires registered
+  workspace paths for `cwd`; the native tool accepts any absolute path.
 
 ## External workspace identities and replies
 
@@ -113,6 +117,9 @@ Delivery is at least once; handle duplicates. Drain replies before re-provision
 or disposal because the new session does not inherit the old maildrop.
 Shared-key holders can impersonate identities; identity naming is not proof
 of independent authentication. See the README security warnings.
+
+Do not import this endpoint into the same DSH instance through its MCP manager.
+Use the host's native tools internally and reserve this endpoint for external clients.
 
 `taskboard_execute`, when installed through the separate patched taskboard,
 starts its native pipeline. Read the card first and use its current `ifVersion`;

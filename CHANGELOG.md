@@ -1,695 +1,85 @@
 # Changelog
 
-## v1.11.1 — release candidate (2026-10-10, not published)
+The latest public npm release before this candidate is `1.6.0`. Versions
+`1.7.0` through `1.11.1` were internal development milestones consolidated
+into `2.0.0`. Full development records remain in Git history.
+
+## v2.0.0 — prepared for publication (2026-10-10, not published)
+
+### Upgrade requirements
+- Node requires `^22.13.0 || >=23.4.0` for built-in SQLite without a flag.
+  DSH `0.2.0-rc.2` is the verified target; historical compatibility claims
+  are removed from the current manifest.
+- All capability switches ship disabled. Review profile overrides explicitly.
+- Worker provider/model/preset/permission selections are required per
+  `spawn_session` call. Use `aitl_catalog` for valid IDs and reconnect clients
+  after the schema update.
+- SQLite schema v3 holds contacts, inboxes, identities, and overrides.
+  Back up before upgrade; automatic downgrade is unsupported.
+
+### Added
+- Authenticated streamable-HTTP MCP and external poll/read/ack inboxes.
+- Workspace-backed identities with owner provisioning, re-provisioning,
+  disposal, and lazy session resume.
+- Persistent spawning with dynamic provider/model/workspace/effort choices.
+- Web catalog selectors, identity controls, lifecycle forms, and diagnostics
+  for unavailable registry selections.
+- Optional Mission Control bridge, requiring separate configuration.
 
 ### Fixed
-- Contacts accept registered native worker IDs and preserve them offline;
-  legacy MCP workspace context is available under `exec.agent.session`.
-- Removed the local DSH self-MCP connection through the manager, restoring
-  native worker identity and workspace context. Documented the setup hazard.
-- Separate auto-memory 3.2.11 compatibility patch makes explicitly saved
-  handoffs searchable while automatic generation remains disabled.
-- `contacts.call` now routes session-backed identity and legacy external replies
-  into the inbox, instead of waking the hidden session. It rejects empty/self
-  sends and refuses external delivery when the inbox is disabled. Regression
-  coverage now includes all five reply paths, with no hidden-session delivery.
-- Contact editor rename and clearing workspace/label/tags/note; workspace choices
-  now persist through the API and arbitrary unregistered paths are rejected.
-- Legacy external contact input validation matches the server's bounded ID format.
-- Ordinary idle/busy sessions display as live instead of offline.
-- SQLite schema v3 persists workspace and identity metadata; recovers generated
-  legacy provisioning notes and preserves bindings during re-provision.
-- Identity replies route into inbox across delivery paths; ordinary sessions
-  keep direct delivery. The identity manager initializes when enabled at runtime.
-- Structured `inbox_disabled` JSON replaces missing-route errors, including
-  enabled-to-disabled reloads; disabled reloads cannot serve inbox JSON through
-  a retained database handle, and the UI avoids blind JSON parsing.
+- Native worker contact IDs, legacy MCP workspace context, callback routing,
+  disabled inbox JSON errors, runtime identity initialization, contact editing,
+  and persisted workspace metadata.
+- Startup and MCP versions now come from package metadata.
 
-### Changed
-- `spawn_session` requires caller-selected provider, model, preset, and permission;
-  optional reasoning effort and workspace are checked against live registries.
-  `aitl_catalog` exposes valid choices through MCP. Ungrouped callers must select
-  a workspace. Retired spawn model/preset config keys no longer pin selections.
-- Permission choices come from the host; removed built-in provider/model,
-  identity preset, and example workspace fallbacks. MC validates each assigned
-  agent's model pair independently. Owner policies and operational limits remain.
-- System registry catalog and UI selectors for configured models, providers,
-  presets, workspaces, and permissions instead of manually typed identifiers.
-  Missing registry choices and saved unavailable values are shown explicitly.
-- Compact panel styling, dedicated Identities tab, workspace and permissions,
-  preset diagnostics, and collapsible lifecycle forms.
-- Panel provisioning requires an explicit preset; inbox restart guidance added.
-- README documents shared-key impersonation, workspace selection, migration,
-  retention, provider costs, schema caching, and separate taskboard Execute patch.
-
-### Validation and release status
-- Native contact/context fixes: independent Sol QA PASS; plugin suite 114/114.
-  Separate explicit handoff regression checks passed 3/3. Self-MCP loader
-  confirmed disabled with zero imported tools, including after restart.
-- Native card retest passed: correct worker workspace, dated log read,
-  handoff/all recall, native Contacts registration, structured execution report,
-  and inbox callback 19 with the real worker ID; polled, read, and acknowledged.
-  The existing card remains in review with all three checklist items complete.
-  Fresh external handoff write, both recall scopes, and exact-ID expansion passed.
-  Initial worker confusion with the separate Mission Control board was resolved
-  by an exact native-tool follow-up to the same session. Package dry-run: 16 files.
-- Dynamic selection update: independent QA PASS; complete plugin suite 112/112,
-  including 28 UI checks, live-registry model validation, and missing preset refusal.
-- Callback fix: independent QA PASS and complete suite 112/112. A live worker
-  selected Codex/Luna with low effort and the registered project workspace;
-  its contacts callback arrived as inbox message 11, was polled, read, and acked.
-  DSH catalog returned HTTP 200 with 11 models and no registry errors afterward.
-- Live MCP spawn accepted an explicit Codex provider/model and low effort,
-  registered workspace, preset, and read-only permission. Session metadata confirmed
-  the exact model route was used; memory status reported the intended workspace.
-  The initial callback check failed and DSH stalled during recovery. The owner
-  restored DSH; the callback routing fix above subsequently passed the live test.
-- UI selector/contact regressions: 21/21; catalog and contact API regressions: 4/4.
-- Live catalog returned 11 configured models, 19 presets, and 10 workspaces with
-  no registry errors. Independent review passed; rendered browser QA unavailable.
-- Independent Sol review passed; plugin suite: 87/87.
-- Live Codex selected the project memory and polled/read/acked worker replies.
-- Separate taskboard patch: seven targeted tests and one successful native
-  execution with inbox reply. It is not bundled into AITL.
-- Manifest advanced to 1.11.1 for this candidate; not published to npm.
-
-## v1.11.0 (2026-10-10)
-
-- Opt-in session-backed external identities attached to a selected workspace,
-  owner provisioning/re-provisioning/disposal, and lazy resume after restart.
-- Identity permissions default to read-only.
-
-## v1.10.0
-
-- SQLite contacts and external inbox: at-least-once poll/ack delivery, threading,
-  bounded maildrops, retention, and external identity headers.
-
-## v1.9.0
-
-- Authenticated loopback MCP endpoint with optional all-tools exposure.
-
-## v1.8.0 (2026-10-08)
-
-**Feature: `spawn_session` tool — in-process spawning of persistent dsh sessions (`spawn` block, default OFF).**
-Same capability as the Mission Control bridge's spawn path, without MC and
-without external scripts: the plugin creates the session through the host
-registry (`agents.create` + `agentPresets` resolve/mount + `workspaces` —
-the exact faces dsh-taskboard uses for scheduled executions). Preset pin
-(resolved before create, mounted in setup — never a bare default shell),
-model pin **config-only** (`spawn.provider/model`, allowlist-enforced;
-model/provider tool args are rejected), optional workspace
-(`spawn.workspaces` allowlist — the cross-workspace ban enforced at tool
-level) and permission (`spawn.allowedPermissions`, default `read-only`).
-Seat cap over the contacts store (`spawn.maxSessions`, default 9), JSONL
-audit journal (`spawn.stateFile`), contacts registration under the chosen
-name, first message delivered through the shared once-only engine.
-Capability-degraded faces refuse loudly instead of silently changing
-semantics. Spawned sessions are persistent peers (distinct from 1-shot
-subagent children — deliberately registered in contacts).
-
-## v1.7.0 (2026-10-08)
-
-**Feature: optional Mission Control integration (`mc` block, default OFF).**
-MC tasks assigned to `runtime: "dsh"` agents auto-spawn dsh sessions
-(new-session.mjs; provider/model fixed to `zai-coding-cn/glm-5.3-flash` at
-spawn only), comments + review-rejects are delivered in, sessions close on
-done/failed, seats/priority/after + silence reminders + reconcile. Off by
-default: no SSE, no spawn, mc-health answers `{enabled:false}`. Bad key file
-or unreachable MC = one warning, plugin unaffected.
-
+### Release preparation
+- Rewritten README covers installation, upgrades, configuration, dynamic tools,
+  memory, replies, migration, troubleshooting, and security. Removed stale
+  Node 20/no-database/no-UI guidance.
+- Described DSH-centered external orchestration, optional third-party MC,
+  integration dependencies, supported-authentication/subscription boundaries,
+  and the security implications of automatic native-tool exposure.
+- Separated taskboard Execute and auto-memory patches from this package;
+  documented the self-MCP import hazard.
+- Added archive/default checks and a prepublication test/check hook.
+- Release candidate plugin suite: 114/114 tests passed. Live workspace, worker,
+  callback, inbox, and memory checks passed. Archive/default checks passed: 17 intended files, no bundled dependencies,
+  and all capability switches disabled. Independent Sol review passed.
+- Rendered UI QA and end-to-end Mission Control remain uncompleted and are
+  disclosed in the README.
 
 ## v1.6.0 (2026-10-03)
 
-**Fix: context bloat on dsh 0.2 (agents could not compact away delivered
-messages).** dsh 0.2.0 materializes every change of `systemPrompt.context()`
-text as a new durable user-role snapshot in history
-(`dsh-agent-loop` `RuntimeContextProjection`). The runtime-context note
-channel (5 notes, 30-min TTL) changed its text on every delivery and every
-expiry, so each send re-appended ALL buffered messages — plus every other
-plugin's runtime context — on top of the steer/notice copy. Removed:
-
-- runtime-context note channel deleted; each message is delivered exactly
-  once (idle + wake → steer/followup; busy or `wake: false` → `agent.inject`
-  notice, which queues for the next step without waking).
-- per-message cap (config `sessionMessage.maxChars`, default 8000) with a truncation note.
-- every message ends with a one-line hint so the compaction summarizer
-  keeps sender + gist instead of quoting it verbatim into every checkpoint.
-- `delivery` values are now `wake-steer` / `wake-followup` / `notice`.
-- compatibility matrix: `0.2.0-rc.2` added.
-- `test/delivery.test.mjs` (mock ctx, `npm test`).
+- Simplified direct delivery to one path per send: idle wake uses steer/followup;
+  busy targets or sends with wake disabled use a visible notice.
+- Added per-message truncation notes and delivery result fields.
+- Declared DSH `0.2.0-rc.2` compatibility for that release.
 
 ## v1.5.1 (2026-09-28)
 
-**DSH-Store remediation (AI-Scarlett/DSH-Store#1219).** Manifest now
-declares `dsh.compatibility.dshReleases` — the exact per-version matrix
-the DSH-Store catalog automation requires (scope declarations like
-`engines`/`peerDependencies` don't satisfy it): `0.1.2` / `0.1.6-alpha.1`
-/ `0.1.7-rc.2`, each `compatible` from live verification. README gains a
-"Permissions, external services & failure bounds" section disclosing the
-contacts-store file write, the loopback-only HTTP surface, and the
-zero-dependency / zero-lifecycle-script / no-credentials posture. No
-code change.
-
-## v1.5.0 (2026-09-28)
-
-**External agents: send-only loopback HTTP API.** New route
-`POST /api/agents-in-the-loop/message` (loopback-only, no auth) lets
-agents outside dsh — Claude Code, scripts — message any REGISTERED
-contact by name: body `{from, contact, message}`. `from` is a free
-sender label (default `external-agent`, ≤64 chars) shown as
-`From <from>:` in the target conversation; delivery reuses the exact
-session_message engine (idle → visible full-text wake, busy →
-mid-turn-safe notice). Design law: externals are send-only — they never
-register into the contacts store, never receive messages, and
-`resumeIfDead` is hard-wired `false` so a dead session is refused
-(`409`), never resurrected. Unknown contact → `404`; empty message →
-`400`; non-POST → `405`. README gains an "External agents" section with
-curl examples and an error table. No change to the tools or the
-contacts store schema.
+- Added the exact DSH release compatibility matrix required by the DSH Store.
+- Documented local contacts persistence and the loopback HTTP trust boundary.
 
 ## v1.4.2 (2026-09-18)
 
-**Raw session-id targeting DISABLED (user directive).** `session_message`
-now accepts only registered contact names as `target`; a raw `session-…`
-id is rejected with a clean error pointing at `session_message`/`contacts`
-action "list". Rationale: raw ids go stale on re-raise and bypass the named
-directory. Tool + param descriptions updated accordingly. No other change.
+- Required registered contact names for `session_message` targets.
+- Rejected raw session-ID targeting to avoid stale IDs and directory bypass.
 
 ## v1.4.1 (2026-09-18)
 
-**npm rename + first npm publish.** Package renamed
-`agents-in-the-loop` → **`dsh-agents-in-the-loop`** (npm name; the GitHub
-repo keeps `agents-in-the-loop`) and published to npm as
-`dsh-agents-in-the-loop@1.4.1` (public access). Plugin row id in
-`cordis.patch.yml` + README examples follow the new name; the composition
-row id is the only breaking change for existing installs (update the
-`- id:` in your profile patch, or reinstall). `bugs` URL fixed to point at
-this repo (was the old dsh-taskboard-flow repo). No behavior change.
-
-## v1.4.0 (2026-09-18)
-
-**DSH version compatibility declared.** `package.json` now carries
-`engines` (node >=20, @deepseek-ai/dsh >=0.1.2) and an OPTIONAL
-`peerDependencies` entry for `@deepseek-ai/dsh >=0.1.2` — the hard floor is
-the `agents.resume({ resumeSessionId })` API introduced in dsh 0.1.2 (see
-v0.7.2). README gains a Compatibility section (floor, verified range 0.1.2
-→ 0.1.6-alpha.1, and the note that the dsh plugin loader does not enforce
-these fields today — they are the machine-readable contract). Description
-updated to mention name-based target resolution. No behavior change.
-
-## v1.3.1 (2026-09-18)
-
-**Target-by-name in `session_message` (stale-id-proof cross-session calls).**
-`send` now accepts the REGISTERED CONTACT NAME as `target`: any value not
-matching `/^session-/` is resolved against the live contacts store at CALL
-TIME, so a re-raised agent re-registered under the same name is always
-reached — raw session ids cached in a peer's context go stale the moment an
-agent is re-created. Raw `session-…` ids still work verbatim (legacy).
-`list` now annotates each live session with its registered `contact` name
-(sid→name map), so models naturally address peers by name; successful sends
-report `resolvedFrom: <contact>` and the log line names the contact. Tool
-description + `target` parameter documentation updated to mark the name as
-PREFERRED. `contacts call` was already name-based and is unchanged.
-Requires a dsh web restart.
-
-
-## v1.3.0 (2026-09-17)
-
-**UI removed.** The web UI surface was dropped entirely — this plugin is
-now exactly two model tools (`session_message` + `contacts`) over the file
-contacts store. No behavior change to the delivery engine.
-
-## v1.1.2 (2026-09-11)
-
-**FIX: `{{model}}` has no value on resumeIfDead.** `deliverSessionMessage`
-resumed dead targets via `agents.resume({ resumeSessionId })` with no
-`agentOptions`, so the resurrected agent had `options.model` undefined while
-dsh-agent-loop defines the `model` prompt variable as
-`context.agent?.options.model` — every wake turn failed with
-`prompt variable "{{model}}" has no value for this assembly (section
-"deployment:persona")`. The resume now passes the deployment default
-selection read from `agentDefaultModel.currentSelection()` (same fallback
-taskboard-flow v0.7.x used). Requires dsh web restart.
-
-
-## v1.1.1 (2026-09-11)
-
-**FIX: prompt-variable poisoning.** The harness system-prompt interpolator
-(dsh-system-prompt, GROUP_AT) scans ALL context text and throws `malformed
-prompt variable reference` on any `{{...}}` whose name is not a valid
-variable. A forwarded session_message payload containing the literal `{{}}`
-(or a template snippet like `{{lastExecution}}`) poisoned the target
-session's system prompt on every model step until the 30-min note TTL
-cleared. `pushContextNote` now sanitizes note text: every `{{` is broken to
-`{ {` before buffering, so forwarded prose can never form a variable
-reference. Requires a dsh web restart to take effect.
-
-
-## v1.0.0 (2026-09-10)
-
-**PIVOT: taskboard-flow → agents-in-the-loop.** The board/trigger/triage
-engine is GONE (user decision 2026-09-10): no ledger polling, no column
-spawns, no triage/executor dispatch, no dshCallback/review wakes, no
-`taskboard_done`, no Telegram bridge, no dispatch state file. What remains
-is the cross-session call center, preserved verbatim from v0.7.3:
-
-- `session_message` — list live sessions; deliver to another session
-  (idle: visible full-text wake via steer/followup; busy: mid-turn-safe
-  plugin notice; both + runtime-context note, 30-min TTL, cap 5;
-  `resumeIfDead` opt-in via `agents.resume({ resumeSessionId })`).
-- `contacts` — named directory (list/get/call/add/update/remove) over
-  `~/.dsh/taskboard-flow-contacts.json` (historical path kept so existing
-  contacts survive the rename). Name-only self-registration (v0.7.3):
-  `add` without `sessionId` registers the calling session.
-
-Config shrinks to `enabled` + `sessionMessage.enabled` + `contacts.enabled`
-(+ optional `contacts.file`). `inject` is now empty (webServer no longer
-required). 1880 → 519 lines. The old `taskboard-flow-state.json` is never
-read and can be deleted. Package renamed `agents-in-the-loop` @ 1.0.0.
-
-## v0.7.3 (2026-09-09)
-
-- `contacts add` no longer requires a `sessionId`: omitted (or the literal
-  `"self"`) registers the CALLING session automatically — agents
-  self-register by name only, instead of researching their own session id
-  first (slow: list-then-guess or tool-cordis inspection). An explicit
-  `sessionId` still registers a contact pointing at a different session.
-  The tool description, `sessionId` param description, SKILL.md, and README
-  now document the name-only flow; self-registrations log with `(self)` and
-  return `selfRegistered: true`.
-
-## v0.7.2 (2026-09-07)
-
-- Fix cross-session delivery to dead targets: `agents.resume()` on dsh
-  0.1.2 expects `{ resumeSessionId }` (delegated to the agent-loop factory →
-  `persistence.prepare(id)`); the plugin passed the pre-0.1.2 `{ sessionId }`
-  shape, so `resumeSessionId` was undefined and every resumeIfDead wake died
-  with "Cannot read properties of undefined (reading 'length')". All three
-  call sites (dshCallback wake, session_message/contacts delivery, executor
-  relay) now send `resumeSessionId`.
-
-## v0.7.1 (2026-09-07)
-
-**Restart-storm fix** — restarting the plugin (or dsh) no longer re-arms every
-dispatch rule:
-
-- **Persistent dispatch state** (`~/.dsh/taskboard-flow-state.json`, override
-  via `state.file`): `spawnedTasks`, `callbackFired`, `processedCallbacks`
-  (capped at 500) and `seenCommentCounts` survive restarts via a debounced
-  atomic write, flushed on dispose. Previously ALL dedupe keys were in-memory
-  closure state, so every restart looked like a fresh world.
-- **`bootDrain` policy for execute (todo) columns** — replaces the v0.4.2
-  unconditional "drain at boot": `fresh` (new default) drains only cards
-  enqueued while the plugin was down (`updatedAt > lastPollAt`) with a clean
-  execution history; `off` drains nothing; `all` restores legacy behavior.
-  The old rule re-executed every stale/queued todo card on EVERY restart.
-- **Failed/rejected guard**: a card whose most recent execution ended
-  `failed` or `cancelled` (quick-reject) is never auto-executed again —
-  the old transition-reset rule re-fired rejected cards on the next poll,
-  overriding the human's reject. Explicit re-queue (UI Run / orchestrator
-  run tool) still works; `succeeded`/no-run cards re-plan as before.
-- State file is pruned on write (keys of deleted/terminal tasks dropped).
-
-## v0.7.0 (2026-09-01)
-
-- New `contacts` tool: a named contact directory over raw session ids.
-  `contacts { action: "list" | "get" }` resolves an alias ("advisor") to
-  its session id + label + LIVE status in one call — no
-  `session_message list`-then-guess. `contacts { action: "call", name,
-  message }` messages a contact through the exact `session_message`
-  delivery engine (idle → full-text wake-steer, busy → mid-turn-safe
-  notice), accepting the same `wake` / `resumeIfDead` knobs. `add` /
-  `update` (incl. rename) / `remove` manage the directory at runtime —
-  no config edit, no restart.
-- Store: local JSON (default `~/.dsh/taskboard-flow-contacts.json`),
-  atomic tmp+rename writes; personal state, never shipped. Kill-switch
-  `contacts.enabled: false` (default ON); custom path via
-  `contacts.file`.
-- Refactor: the `session_message` send path was extracted into a shared
-  `deliverSessionMessage` used by both tools — delivery semantics are
-  unchanged.
-
-## v0.6.2-alpha.3 (2026-08-31)
-
-- Board hygiene law (SKILL.md): NEVER `taskboard_delete` a card that
-  contains work — finished work hands off `in_review` for the creator to
-  close. Soft-deleted cards vanish from the main board and read as lost;
-  delete is for true junk only, on the user's explicit instruction.
-  Cleanup/workspace-hygiene sessions never touch board cards (the janitor
-  protocol governs files, not cards).
-- Example config triage prompt carries the same rule.
-
-## v0.6.2-alpha.2 (2026-08-31)
-
-- Telegram bridge: remove hardcoded FX-trading action maps
-  (`ACTION_URGENCY` / `ACTION_SKILLS` / dead `ACTION_URGENCY_FIX`). Action →
-  skill and action → urgency are now config-driven via
-  `telegramBridge.actionSkills` / `telegramBridge.actionUrgency`; unknown
-  actions get no skill and normal urgency. No domain-specific defaults ship
-  in the published plugin.
-
-## v0.6.2-alpha.1 — first public alpha (2026-08-31)
-
-First tagged release of the dsh-taskboard-flow companion plugin.
-
-- Board flow engine: triage spawn (backlog), direct run-API execution (todo),
-  creator wake with report (in_review), `@orchestrator` relay, `[ASK]`
-  decision gate, global/project/column concurrency caps
-- `session_message` model tool: cross-session messaging with state-aware
-  delivery — visible wake-steer for idle targets, mid-turn-safe plugin notice
-  for busy targets, runtime-context notes (30-min TTL, cap 5); kill-switch
-  `sessionMessage.enabled`
-- `taskboard_done`: creator-only task close
-- Optional Telegram callback bridge
-- File-based cordis config: sanitized `cordis.patch.yml.example` ships, live
-  config gitignored; local-only, no telemetry, no stored credentials
-- Companion docs: public README (use cases, flows, config reference) and
-  agent-facing SKILL.md
-
-## Historical notes (v0.2 → v0.6.2)
-
-DSH plugin for per-board, per-column kanban flow control + Telegram callback
-bridge. Config is **file-based** (cordis composition) — there is no web UI
-settings panel.
-
-## What it does
-
-1. **Ledger polling** — watches `dsh-taskboard`'s JSON ledger. When a task
-   transitions into an enabled column (e.g. `todo`), spawns an agent session
-   with that column's prompt + task body.
-
-2. **Telegram callback bridge** (per-project) — polls a brain MCP endpoint
-   (`get_pending_callbacks`). When found, gathers market data, creates a
-   kanban task with embedded data, marks the callback processed.
-
-## Configuration
-
-All config lives in the cordis composition — the plugin's
-`cordis.patch.yml` (defaults) overridden by the profile's
-`cordis.patch.yml`. Edit the profile patch and restart `dsh web`.
-
-```yaml
-- id: taskboard-flow
-  name: taskboard-flow
-  config:
-    # ── Global ───────────────────────────────────────────
-    enabled: true             # master on/off
-    pollMs: 5000              # ledger polling interval (ms)
-    skipFirstPoll: true       # seed seen map on restart, don't re-trigger
-    maxConcurrent: 3          # max concurrent sessions (0 = unlimited)
-    ledgerPath: ''            # empty = ~/.dsh/dsh-taskboard.json
-    defaultEnabled: false     # fallback for unlisted projects
-    defaultPrompt: 'You are a triage agent...'
-
-    # ── Per-Project (native YAML) ────────────────────────
-    projects:
-      'WORKSPACE-ID':
-        enabled: true
-        cwd: /path/to/project
-        presetId: ''           # default agent preset (overridable per column)
-        model: {}              # default model {provider, model} (overridable per column)
-        renameSession: true
-        attachWorkspace: true
-
-        # ── Telegram Bridge (optional) ──────────────────
-        telegramBridge:
-          enabled: false
-          brainMcpUrl: 'http://localhost:8767/mcp'
-          pollMs: 10000
-
-        # ── Per-Column (status) ─────────────────────────
-        columns:
-          backlog:
-            enabled: true      # spawn sessions when tasks enter this status
-            prompt: 'You are the triage agent...'
-            presetId: ''
-            model: {}
-          todo:
-            enabled: false
-            prompt: 'You are the executor...'
-            presetId: ''
-            model: {}
-          in_review:
-            enabled: false
-            prompt: 'You are the reviewer...'
-            presetId: ''
-            model: {}
-```
-
-## How session spawning works
-
-1. Plugin detects a task status transition (e.g. `backlog → todo`).
-2. Checks: project enabled? column enabled? concurrency limit OK?
-3. Creates an agent session via `agents.create()` with cwd + preset + model.
-4. Attaches the session to its workspace via `workspaceRegistry.attachSession()`.
-5. Renames the session to the task title.
-6. **`inject()`** — adds the column prompt as system framing (no agent turn).
-7. **`followup()`** — adds the task body as a user message (triggers the turn).
-8. The agent processes the task, calls tools, sends results.
-
-## skipFirstPoll
-
-On restart the `seen` map is empty. Without `skipFirstPoll`, every existing
-task in an enabled column would look like a new transition and spawn a
-session. With `skipFirstPoll: true` (default) the first poll only populates
-`seen` without spawning — only tasks that transition **after** the first
-poll trigger sessions.
-
-## Telegram callback actions
-
-| Action | Urgency | Task Prompt |
-|--------|---------|-------------|
-| `full_analysis` | normal | Comprehensive analysis using all brain MCP tools |
-| `launch_squad` | urgent | Squad workflow per FLOW-SPEC.md |
-| `execute_trade` | urgent | Pre-execution CB checks + send_decision |
-| `research_request` | normal | Market research report |
-
-## DSH-session callbacks (`dshCallback`)
-
-Per-column option that delivers a transition notice INTO an existing DSH
-session — by default the session that CREATED the task (resolved from the
-ledger's `createdBy.sessionId`). This is the callback-to-the-orchestrator
-path: no Telegram, no external bridge — the notice lands directly in the
-live session's context.
-
-```yaml
-columns:
-  in_review:
-    enabled: false          # spawning stays off if you only want the callback
-    dshCallback:
-      enabled: true         # opt-in per column
-      target: creator       # 'creator' (default) | explicit session id string
-      mode: notify          # 'notify' = inject notice (no turn) | 'wake' = followup (triggers a turn)
-      includeReport: true   # append the last execution report summary (truncated to 600 chars)
-      resumeIfDead: false   # experimental: agents.resume() the session if it is not live
-      telegramFallback: false # deliver via brain send_telegram when the session is not live
-```
-
-Behaviour notes:
-
-- Fires once per `(taskId, status)` transition; `skipFirstPoll` seeding makes
-  restarts safe (pre-existing states never replay).
-- Independent of the column `enabled` (spawn) flag — a column can be
-  spawn-off + callback-on (e.g. notify the creator at `in_review` without
-  spawning a reviewer).
-- `mode: wake` uses the same `followup` path as session spawning, so the
-  target session actually takes a turn (it should know how to react — e.g.
-  an orchestrator persona instructed to `taskboard_get` on taskboard-flow
-  notices).
-- If the target session is not live the notice is dropped with a host-log
-  warn, unless `resumeIfDead: true` (resumes the persisted session via
-  AgentRegistry.resume and then delivers — wired `true` on the brain board
-  in_review column since v0.4.2 so the review loop survives `dsh web`
-  restarts; fallback order live → resume → Telegram).
-- Host-log lines start `[taskboard-flow] dshCallback`.
-
-## Execute mode (`spawnMode: execute`) — v0.4
-
-A column may spawn through the REAL taskboard execution service instead of a
-bare session:
-
-```yaml
-columns:
-  todo:
-    enabled: true
-    spawnMode: execute   # default is 'spawn' (classic behavior)
-```
-
-`execute` POSTs `<executeUrl>/tasks/<id>/run` (the same API the GUI's
-"Execute now" button uses; default `executeUrl http://127.0.0.1:9001/dsh-taskboard`,
-overridable per project or globally). The execution service owns the whole
-lifecycle: mints the session, claims the task, prepares worktree isolation,
-attaches the workspace, records the execution (sessionId / outcome / report),
-and settles (auto-comment + move to `in_review` when the session ends without
-handoff). Executors are first-class execution sessions — they can use
-`taskboard_get/checklist/execution_report` on their own task directly. The
-column `prompt` is NOT used in execute mode (the task's own `prompt` is).
-
-Per-entry dedupe: fire keys are `(taskId, status)` and are DELETED when the
-task leaves the status — review loops (`in_review → in_progress → in_review`)
-and re-plans (`todo → backlog → todo`) fire again, as they should.
-
-Execute-mode dispatch differences (v0.4.2):
-
-- **Dispatch is gated by the dedupe key alone** (`fire whenever the key is
-  absent`), not by transitions: a `todo` child queued across a `dsh web`
-  restart DRAINS at boot instead of stalling. This is safe because the run
-  API claims atomically — a claimed task is `in_progress`, never `todo`, so a
-  `todo` task can never have a live executor and a boot POST is never a
-  duplicate. Classic spawn columns keep transition-only dispatch
-  (restart-seeded).
-- `executeOnlyPrefix` (column knob): only tasks whose title starts with the
-  prefix mint an executor session. Brain board convention: `[<main-id>] …`
-  children execute; the umbrella MAIN card sits in `todo` as a planned
-  marker only.
-- `executeMaxConcurrent` (column > project > `maxConcurrent` fallback,
-  default 3): caps simultaneous run-API executors per project. In-flight =
-  tasks currently `in_progress` in the same project + dispatches fired in
-  the current poll pass. Over-cap tasks stay in `todo` and auto-dispatch as
-  executors settle (retried every poll; logged once per task).
-
-## `@executor` relay — same-session review loop — v0.4
-
-Any NEW comment whose body starts with `@executor` (e.g.
-`@executor checklist item 2 not verified — re-run tests`) is relayed into the
-task's LAST executor session (`agent.followup`, source user — the SAME agent
-session continues and modifies; no new spawn). The relay message tells the
-executor to move the task to `in_progress`, fix, update the report, and hand
-off to `in_review` again — which re-fires the `dshCallback` (per-entry dedupe
-was reset on departure). If the executor session is not live, the feedback
-goes to Telegram when the project has a `telegramBridge.brainMcpUrl`,
-otherwise it is dropped with a host-log warn. Host-log lines start
-`[taskboard-flow] @executor relay`.
-
-## v0.4.3 — routing standard (2026-08-29)
-
-Question/decision cards are routed to the board's orchestrator instead of
-triage, and workers can escalate order-level questions mid-loop:
-
-1. **`skipSpawnPrefixes`** (column, array of strings) — titles starting with
-   any listed prefix NEVER take that column's action (no triage spawn, no
-   execute). Brain backlog uses `['[ASK]']`: question cards sit in backlog as
-   orchestrator-answered cards.
-2. **`dshCallback.onlyPrefix`** (column callback, string) — the callback fires
-   ONLY for titles starting with the prefix; non-matching tasks are skipped
-   WITHOUT consuming the dedupe key. Brain backlog pairs `onlyPrefix: '[ASK]'`
-   with `target: <orchestrator session>` so an [ASK] card landing in backlog
-   WAKES the orchestrator, which answers in a comment and hands off
-   in_review.
-3. **`@orchestrator` relay** — a NEW comment starting `@orchestrator` on ANY
-   task in a project with `orchestratorSession` configured is followed-up
-   into that session (live → resume → Telegram fallback). Triage/executors
-   use it to escalate scope/intent questions instead of guessing; the triage
-   skill's Step 0 directs them to it.
-4. **`[GOAL]` prefix** = provenance marker on planned hand-off cards from
-   brain to project boards; mechanics are the default work order (creator
-   callback returns them to the brain orchestrator). No special code.
-
-Harness: `/tmp/tf-test/harness3.mjs` — 6/6 PASS (skip, onlyPrefix wake +
-key-free skip, classic-spawn regression, both relays).
-
-## v0.4.2 — audit fixes (2026-08-28)
-
-- **Log channel**: all 27 action log calls moved from `ctx.logger` to
-  `console.log` — ctx.logger output never reached `~/.dsh/dsh-web.log`
-  (verified in the post-smoke-test audit), which left execute/callback/
-  relay actions without an audit trail.
-- **Execute concurrency gate**: `executeMaxConcurrent` knob (see above);
-  previously execute POSTs bypassed `maxConcurrent` entirely.
-- **Boot queue-drain**: execute columns fire whenever the dedupe key is
-  absent (queued children survive `dsh web` restarts; classic columns
-  unchanged).
-- **Checklist self-mint protocol** (config + skill `taskboard-triage`, not
-  code): triage never passes `checklist` to taskboard_create; child prompts
-  carry a `DoD items:` block and executors mint their own checklist via
-  `taskboard_checklist action=add` — the add response prints every item
-  `id=`, closing the id-visibility gap that left one smoke-test executor
-  unable to check anything off.
-- Offline harness: `/tmp/tf-test/harness2.mjs` — 16/16 pass (boot drain,
-  classic seeding, gate defer/release/log-once, dedupe, callbacks, relay,
-  re-entry, re-plan, spawn regression).
-
-## Files
-
-- `lib/index.js` — host-side plugin (ledger polling, session spawn, Telegram bridge)
-- `cordis.patch.yml` — default config (plugin bundle layer)
-- `package.json` — manifest
-
-## Install
-
-```sh
-dsh plugin --profile web add "link:/path/to/taskboard-flow"
-```
-
-Restart DSH after install or config changes.
-
-## v0.4.4 — direct-execution lane (2026-08-30)
-
-User directive: "if it lands on 'to be done' should not be triaged and should
-have its info directly… when its a triage task the title should include Triage."
-
-- New column knob `executeSkipTitleContains: [string]` (case-insensitive
-  contains match). The todo column now executes cards DIRECTLY by default —
-  any self-contained card (prompt + model pin) landing in todo mints an
-  executor session, no triage, no prefix requirement. Only titles containing
-  a skip keyword are held as planned markers. Brain config: `['Triage']` —
-  triage's Phase A retitles umbrella MAIN cards with "Triage", so umbrellas
-  never double-execute AND the title shows which path the card took.
-- Legacy `executeOnlyPrefix` still honored if set (filters combine).
-- Backlog ("to be planned") remains the TRIAGE lane (`skipSpawnPrefixes`
-  `[ASK]` unchanged). Model law alongside: a user-named model is LAW —
-  pinned verbatim on every child/work session, never substituted.
-- Requires dsh web restart to go live.
-## v0.4.5 — steer delivery
-
-Wake callbacks (`in_review`/`blocked` wakes for the creator session) and the
-`@executor` / `@orchestrator` comment relays are now delivered via
-`agent.steer()` — a mid-turn context injection the agent reads at its next
-step boundary (next tool run / model request) instead of waiting for the
-current turn to end. Idle agents start a turn on it, so wake semantics are
-preserved. If the live agent handle lacks `.steer` (older DSH builds), the
-plugin falls back to `agent.followup()` exactly as before.
-
-New optional per-callback knob: `delivery: 'steer' | 'followup'` (default
-`'steer'`) on wake callback config entries — set `followup` to restore the
-old queued-message behavior. Existing `cordis.patch.yml` configs stay valid
-via the default.
-
-Unchanged: `notify`-mode callbacks still use `agent.inject()` (no wake), and
-the spawn path (system-framing `inject` + `followup` task body for new
-sessions) is untouched. Requires dsh web restart to go live (user action).
-
-## v0.4.6 — failed-dispatch retry
-
-Failed run-API POSTs (HTTP 400 concurrency races, "no task" for deleted cards) no longer permanently disarm todo cards: the spawn key is removed on failure and the card re-arms for a later retry, with a 15s cooldown between attempts so persistent errors do not hammer the run API every poll. The deferred-by-cap path (executeMaxConcurrent) is unchanged. Requires a dsh web restart to take effect (user action).
-
-## v0.4.7 — context() channel delivery
-
-Wake callbacks and the `@executor` / `@orchestrator` comment relays are now delivered as **runtime-context contributions**: the plugin keeps a per-session note buffer and registers, for every live agent (seeded at boot + `agent/created` / `agent/disposed` events, pattern from dsh-file-reference-local), a `systemPrompt.context({name: 'taskboard-flow', order: 200})` entry whose `text()` renders the buffer into the agent's "Current runtime context" snapshot — the payload is read at the target's next tool run / model request, mid-turn included.
-
-Harness physics split: a **busy** target gets the context contribution alone (steering an in-flight turn is lossy); an **idle** target additionally receives a ONE-LINE wake nudge ("context updated: … — full notice in your runtime context") via `steer` (fallback `followup`) so the session actually starts a turn. The full payload never rides in the nudge.
-
-New per-callback knob: `delivery: 'context' | 'steer' | 'followup'` (default `'context'`); `steer`/`followup` restore the v0.4.5 message-based behavior. Notes expire after 30 minutes and are capped at 5 per session. Dead-session resume and Telegram fallbacks are unchanged; the spawn path (inject + followup for NEW sessions) is untouched. Requires a dsh web restart to go live — user action, do NOT restart anything yourself.
-
-v0.4.8 — callback notices now end with a continue-current-task-first + record-in-todo instruction (user directive 2026-08-30).
-
-0.4.9 — creator-close: a #done comment by the task creator on an in_review card performs the done move via the board move API (agent tool layer forbids done; creator-closes law 2026-08-30).
-
-## v0.5.0 — taskboard_done tool (creator-closes)
-Model tool registered via ctx.tools.register: creator-only close (caller session === task createdBy.sessionId, fail-closed) for in_review tasks; posts the closing comment then performs the done move via the board move API (re-reads the task first — the comment bumps version). The '#done' comment branch (v0.4.9) stays as a compatible fallback. Needs dsh web restart to go live.
-
-## v0.6.0 — session_message tool (cross-session messaging)
-Model tool registered via ctx.tools.register (kill-switch: `sessionMessage.enabled: false` in the config block, default ON): ANY session agent can send a message to ANY other session agent — the generic form of the board-scoped relays. Actions: `list` → live sessions `[{id,status}]` (AgentRegistry); `send` (target + message) → delivery via the v0.4.7 runtime-context stack (pushContextNote + installContextNotes + idle wake nudge via steer/followup; 30-min TTL, cap 5). `resumeIfDead: true` (default false) resurrects a dead target via AgentRegistry.resume — same gate as dshCallback. Caller identity from exec.agent.id; self-send refused; busy targets get context-only delivery. Needs dsh web restart to go live (user action).
-
-## v0.6.1 — session_message full-text wake (live-test fixes)
-Live two-way testing exposed three defects, all fixed: (1) the idle-target wake was a POINTER ("full text in your runtime context") that rendered in the target conversation while showing humans nothing — the wake now carries the FULL message text, visible in the target conversation the moment anyone opens the session; (2) the result overstated delivery (`context+nudge` fired merely because `steer` exists) — the result now reports honest `nudgeVia: 'steer'|'followup'|'none'` plus a `note` field; (3) documented harness physics: main GUI sessions start turns on user input only — the wake renders the message but does not force a turn; the agent reads it at its next turn via conversation history + the runtime-context note. Deferred: GUI-bell/desktop notification on delivery (blocked: notify service contract unverifiable — the Cordis inspect bridge currently drops tool args, separate bug). Needs dsh web restart to go live (user action).
-
-## v0.6.2 — session_message visible notice for busy targets
-The two-test round exposed the remaining hole: a BUSY target got `context-only` delivery — model-facing, invisible to humans (TEST B never appeared in the conversation, so its requested reply never came). Fix per user direction: when the target is busy and wake is requested, the full text is injected as a plugin-source notice (`agent.inject`, `source: { kind: 'plugin', plugin: 'taskboard-flow', form: 'notice' }`) — the SAME visible delivery path as context-compression nudges: renders in the target conversation immediately, mid-turn safe, starts no turn. A deferred-timer wake (poll status every 5s, fire the steer on idle) was drafted first and replaced by this strictly better mechanism — no polling, no delay, no timer cleanup surface. Result fields now include `noticeInjected`; busy delivery reports `context+notice`. The v0.6.1 race fix (single `idleAtSend` status read) is retained. Needs dsh web restart to go live (user action).
-
-## v1.11.0 — session-backed external identities (2026-10-10)
-- External harnesses can register **identities**: each identity is a contact backed by a real hidden dsh session attached to a chosen workspace (one workspace per identity, multiple identities per harness). Tools called under an identity run in that session's context — memory/taskboard/file tools resolve the correct workspace natively (fixes the home-directory fallback).
-- Identity lifecycle: provision / re-provision (new session first, then swap) / dispose — owner-only via the panel or identities API; read-only permission day-one; max 8; orphan-flag-only on restart; lazy resume with rate-limited journaling.
-- Schema v2: contacts gain `cwd` + `identity` columns (idempotent migration; fixes silently-dropped tool-supplied cwd).
-- Security unchanged: loopback + shared bearer key; identity contacts are protected from accidental delete/re-point via contacts tool (use the identities API).
-- Config: `identities.{enabled,maxIdentities,model,allowedPermissions}` — `enabled` is runtime-togglable from the Config panel; published default false.
+- First npm publication under `dsh-agents-in-the-loop`.
+- Renamed the composition row to `dsh-agents-in-the-loop`; existing profiles
+  needed the matching ID or reinstallation.
+- Corrected repository issue links.
+
+## Earlier development history
+
+Before the npm publication, the project evolved from taskboard-flow into
+agents-in-the-loop. Taskboard trigger/triage/executor logic was removed in
+the `1.0.0` pivot; session messaging and named contacts remained. Subsequent
+development added name-based targeting, self-registration, dead-session resume,
+prompt-template sanitization, and the send-only external HTTP route. Later
+internal `1.7.0`–`1.11.1` work introduced the optional MC bridge, spawning,
+MCP, inboxes, workspace identities, and UI refinements now released together
+as the prepared `2.0.0` candidate. Historical behavior is not a current API
+contract; use the README for current setup and tool semantics.
