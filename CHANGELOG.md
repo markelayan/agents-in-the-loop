@@ -39,11 +39,15 @@
 ### Validation and release status
 - Dynamic selection update: independent QA PASS; complete plugin suite 112/112,
   including 28 UI checks, live-registry model validation, and missing preset refusal.
+- Callback fix: independent QA PASS and complete suite 112/112. A live worker
+  selected Codex/Luna with low effort and the registered project workspace;
+  its contacts callback arrived as inbox message 11, was polled, read, and acked.
+  DSH catalog returned HTTP 200 with 11 models and no registry errors afterward.
 - Live MCP spawn accepted an explicit Codex provider/model and low effort,
   registered workspace, preset, and read-only permission. Session metadata confirmed
   the exact model route was used; memory status reported the intended workspace.
-  Callback verification remains incomplete: DSH HTTP became unresponsive, and
-  its subsequent startup stalled in a filesystem open before binding the listener.
+  The initial callback check failed and DSH stalled during recovery. The owner
+  restored DSH; the callback routing fix above subsequently passed the live test.
 - UI selector/contact regressions: 21/21; catalog and contact API regressions: 4/4.
 - Live catalog returned 11 configured models, 19 presets, and 10 workspaces with
   no registry errors. Independent review passed; rendered browser QA unavailable.
