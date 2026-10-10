@@ -56,6 +56,11 @@
           bridge:               # phase 2 (harness tool bridging) — not implemented yet
             enabled: false
             allowedTools: []
+        identities:            # v1.11 session-backed external identities
+          enabled: false       # published default; TESTING deployments flip true in the LIVE overlay
+          maxIdentities: 8
+          model: ''            # '' = spawn pair default
+          allowedPermissions: [read-only]
         # DSH-MC-1 — Mission Control runtime (SSE → spawn/deliver/close).
         # Key file: JSON {"key":"mca_…"}; never logged, never printed.
         mc:
