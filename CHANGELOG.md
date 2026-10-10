@@ -35,6 +35,11 @@
 ### Validation and release status
 - Dynamic selection update: independent QA PASS; complete plugin suite 112/112,
   including 28 UI checks, live-registry model validation, and missing preset refusal.
+- Live MCP spawn accepted an explicit Codex provider/model and low effort,
+  registered workspace, preset, and read-only permission. Session metadata confirmed
+  the exact model route was used; memory status reported the intended workspace.
+  Callback verification remains incomplete: DSH HTTP became unresponsive, and
+  its subsequent startup stalled in a filesystem open before binding the listener.
 - UI selector/contact regressions: 21/21; catalog and contact API regressions: 4/4.
 - Live catalog returned 11 configured models, 19 presets, and 10 workspaces with
   no registry errors. Independent review passed; rendered browser QA unavailable.
