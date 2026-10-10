@@ -7,15 +7,26 @@ import { join } from 'node:path'
 import { readCatalog } from '../lib/catalog.js'
 import { apply } from '../lib/index.js'
 
+test('catalog exposes current model-specific efforts and reports unavailable permission registry', async () => {
+  const llm = { listProviders: () => [{ id: 'p' }], listModels: () => [{ id: 'm' }],
+    resolveModelInfo: () => ({ reasoning: { efforts: [{ id: 'maximum', name: 'Maximum' }] } }) }
+  const result = await readCatalog({ agentCtx: { get: (name) => name === 'llm' ? llm : undefined } })
+  assert.deepEqual(result.models[0].reasoningEfforts, [{ id: 'maximum', name: 'Maximum' }])
+  assert.deepEqual(result.permissions, [])
+  assert.ok(result.errors.permissions)
+})
+
 test('catalog projects registry choices without returning service configuration', async () => {
   const services = {
     llm: { listProviders: () => [{ id: 'provider', name: 'Configured provider', apiKey: 'omit' }],
       listModels: async () => [{ id: 'model', name: 'Configured model', privateConfig: 'omit' }] },
     agentPresets: { list: async () => ({ ok: true, value: { presets: [{ id: 'standard', name: 'Standard', prompt: 'omit' }] } }) },
+    permissionPresets: { catalog: () => ({ defaultOptions: [{ value: 'permission-from-host' }] }) },
   }
   const result = await readCatalog({ agentCtx: { get: (name) => services[name] },
     wsRegistry: { list: () => [{ id: 'ws', title: 'Project', path: '/project', internal: 'omit' }] } })
-  assert.deepEqual(result.models, [{ provider: 'provider', model: 'model', label: 'Configured provider / Configured model' }])
+  assert.deepEqual(result.models, [{ provider: 'provider', model: 'model', label: 'Configured provider / Configured model', reasoningEfforts: [] }])
+  assert.deepEqual(result.permissions, ['permission-from-host'])
   assert.deepEqual(result.presets, [{ id: 'standard', title: 'Standard' }])
   assert.deepEqual(result.workspaces, [{ id: 'ws', title: 'Project', path: '/project' }])
   assert.deepEqual(result.errors, {})

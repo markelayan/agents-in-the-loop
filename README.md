@@ -26,7 +26,7 @@ removed in v1.0.0. Native task execution belongs to the separate
   /api/agents-in-the-loop/contacts` + `GET /sessions` for a client panel.
 - **`spawn_session`** (v1.8.0, `spawn.enabled`, default OFF) — spawn a NEW
   persistent dsh session in-process (no external scripts, no MC required):
-  preset pin + config-pinned model, optional workspace/permission, seat cap,
+  caller-selected provider/model/preset/permission, registered workspace, seat cap,
   contacts registration, first message delivered. Spawned sessions are
   persistent co-workers reachable by name via `session_message`/`contacts`.
 - **State-aware delivery engine** (shared by all paths): every
@@ -111,13 +111,21 @@ Spawns a NEW persistent dsh session the way the Mission Control bridge does,
 but fully in-process (host `agents.create` + `agentPresets` resolve/mount +
 `workspaces` — the same faces dsh-taskboard uses for scheduled executions):
 
-- args: `name` (contacts name for the new session) + `message` (first task
-  brief, delivered once via the shared engine); optional `preset`
-  (default `spawn.preset`), `workspaceId` (checked against a nonempty allowlist),
-  `permission` (`read-only` default; must be in `spawn.allowedPermissions`),
-  `wake` (default true).
-- The model is pinned by config (`spawn.provider/model`) and CANNOT be
-  chosen per call — passing `model`/`provider` is rejected with an error.
+- Discover current choices with `aitl_catalog {}`. It projects the host's
+  providers/models, model-specific reasoning efforts, presets, workspaces, and
+  permission presets without returning credentials or preset prompts.
+- Required args: `name`, `message`, `provider`, `model`, `preset`, `permission`.
+  Optional: `reasoningEffort`, `workspaceId`, and `wake` (default true).
+  Each call validates its exact selections against the current host registries.
+  Unsupported selections fail before creation; there is no model substitution.
+- A supplied workspace must be registered and satisfy any owner allowlist.
+  Omission uses the caller's bound workspace; an ungrouped caller must select one.
+  Permission and preset selections still respect owner policies and seat limits.
+- Retired `spawn.provider`, `spawn.model`, `spawn.reasoningEffort`,
+  `spawn.allowedModels`, and `spawn.preset` settings no longer pin calls and
+  cannot be saved through Config. Remove old profile keys when convenient.
+  This changes the spawn call schema; reconnect MCP clients that cache schemas.
+  The response returns separate `provider` and `model` IDs.
 - Preset is resolved BEFORE creation and mounted in `setup` — a session
   without a resolvable preset is refused, never spawned as a bare shell.
 - Seat cap counts live sessions registered in the contacts store
@@ -196,11 +204,7 @@ One row (all keys optional, defaults shown):
         spawn:
           enabled: false          # kill-switch for the spawn_session tool
           maxSessions: 9          # seat cap over the contacts store
-          preset: ''              # default preset ('' = caller must pass one)
           allowedPresets: []      # empty = any resolvable preset
-          provider: zai-coding-cn # model pin — CONFIG-ONLY, never a tool arg
-          model: glm-5.3-flash
-          allowedModels: [zai-coding-cn/glm-5.3-flash, openai-codex/gpt-6-luna]
           workspaces: []          # empty removes explicit workspace allowlist; omitted arg uses caller
           allowedPermissions: [read-only]
           stateFile: '~/.dsh/spawned-sessions.json'  # JSONL audit journal
@@ -290,7 +294,7 @@ Config keys (plugin config → `mc`):
 | `maxSessions` | int | `9` | seat cap |
 | `silentMinutes` | int | `20` | reminder threshold |
 | `excludedContacts` | string[] | `["dsh-maintainer"]` | excluded from seat count |
-| `provider` / `model` | string | `zai-coding-cn` / `glm-5.3-flash` | spawn-time model ids |
+| `provider` / `model` | string | empty | optional bridge defaults; assigned agent selection takes precedence; missing pair refuses dispatch |
 | `newSession` | string | `~/.dsh/new-session.mjs` | spawner path |
 | `stateFile` | string | `~/.dsh/mc-runtime-state.json` | journal |
 | `projects.<slug>.workspaceId` | string | — | MC project → dsh workspace |
@@ -464,10 +468,9 @@ Replies to this contact go to inbox rather than waking its hidden session;
 receive them using `poll`, `peek`, and `ack` with the returned message ID.
 Ordinary local sessions do not acquire mailboxes.
 
-The internal preset fallback is `aitl-identity`; this package does not ship
-that preset. The panel requires an explicit configured preset before provision
-or re-provision. Missing presets fail provisioning. `standard` was verified in
-the test deployment; check your own installed presets. Permissions default to
+The panel requires an explicit configured, installed preset before provision
+or re-provision. There is no built-in preset fallback. Missing presets fail
+provisioning. Choose from your deployment's preset registry. Permissions default to
 `read-only`, which does not isolate holders of the shared bearer credential.
 
 Verify selection with native `memory_status`: it must report the intended
@@ -523,7 +526,7 @@ mcp:
   allowNonLoopback: false   # keep false — network exposure is out of scope
   allTools: false           # ⚠ true = FULL machine control for key holders
   identityHeader: x-aitl-identity
-  tools: [contacts, session_message, spawn_session]   # used when allTools=false
+  tools: [contacts, session_message, aitl_catalog, spawn_session]   # used when allTools=false
   inbox:
     enabled: false          # ⚠ flip true only locally
     file: ~/.dsh/aitl.db

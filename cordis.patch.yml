@@ -19,16 +19,11 @@
           enabled: false      # published default; TESTING deployments flip true in the LIVE overlay
           file: '~/.dsh/taskboard-flow-contacts.json'
         # v1.8.0 — spawn_session tool. Published default OFF; model/provider
-        # are pinned here and NEVER selectable per call.
+        # are required per call and validated against the live host registry.
         spawn:
           enabled: false      # published default; TESTING deployments flip true in the LIVE overlay
           maxSessions: 9
-          preset: ''            # default preset; '' = caller must pass one
           allowedPresets: []    # empty = any resolvable preset
-          provider: zai-coding-cn
-          model: glm-5.3-flash
-          reasoningEffort: ''   # '' = unset
-          allowedModels: [zai-coding-cn/glm-5.3-flash, openai-codex/gpt-6-luna]
           workspaces: []        # empty removes explicit workspace allowlist; omitted arg uses caller
           allowedPermissions: [read-only, workspace-write]
           stateFile: '~/.dsh/spawned-sessions.json'
@@ -39,7 +34,7 @@
           apiKeyFile: ~/.dsh/aitl-mcp-key.json
           callerId: session-mcp-external
           allowNonLoopback: false
-          tools: [contacts, session_message, spawn_session]
+          tools: [contacts, session_message, aitl_catalog, spawn_session]
           allTools: false       # ⚠ true = FULL machine control for key holders (TESTING only, live overlay)
           identityHeader: x-aitl-identity
           inbox:                # v1.10.0 maildrop + contacts-in-SQLite
@@ -69,10 +64,6 @@
           maxSessions: 9
           silentMinutes: 20
           excludedContacts: [dsh-maintainer]
-          provider: zai-coding-cn
-          model: glm-5.3-flash
-          projects:
-            sandbox:
-              workspaceId: '00000000-0000-0000-0000-000000000000'   # placeholder — set the real workspace in the live overlay
-              firstMessage: '~/.dsh/mc-first-message.txt'           # placeholder — set the real path in the live overlay
-              rules: 'TEST task: no code, no git, no repo or Atlas edits; MC tools only.'
+          provider: ''         # optional bridge default; assigned MC agent choices win
+          model: ''
+          projects: {}         # register real workspace mappings locally

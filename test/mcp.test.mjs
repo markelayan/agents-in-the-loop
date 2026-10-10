@@ -40,7 +40,7 @@ describe('mcp config', () => {
     assert.equal(c.path, '/api/agents-in-the-loop/mcp')
     assert.equal(c.callerId, 'session-mcp-external')
     assert.equal(c.allowNonLoopback, false)
-    assert.deepEqual(c.tools, ['contacts', 'session_message', 'spawn_session'])
+    assert.deepEqual(c.tools, ['contacts', 'session_message', 'aitl_catalog', 'spawn_session'])
     assert.deepEqual(c.bridge, { enabled: false, allowedTools: [] })
   })
   test('tilde expansion and tool override', () => {

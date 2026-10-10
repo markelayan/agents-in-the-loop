@@ -16,6 +16,13 @@
   a retained database handle, and the UI avoids blind JSON parsing.
 
 ### Changed
+- `spawn_session` requires caller-selected provider, model, preset, and permission;
+  optional reasoning effort and workspace are checked against live registries.
+  `aitl_catalog` exposes valid choices through MCP. Ungrouped callers must select
+  a workspace. Retired spawn model/preset config keys no longer pin selections.
+- Permission choices come from the host; removed built-in provider/model,
+  identity preset, and example workspace fallbacks. MC validates each assigned
+  agent's model pair independently. Owner policies and operational limits remain.
 - System registry catalog and UI selectors for configured models, providers,
   presets, workspaces, and permissions instead of manually typed identifiers.
   Missing registry choices and saved unavailable values are shown explicitly.
@@ -26,6 +33,8 @@
   retention, provider costs, schema caching, and separate taskboard Execute patch.
 
 ### Validation and release status
+- Dynamic selection update: independent QA PASS; complete plugin suite 112/112,
+  including 28 UI checks, live-registry model validation, and missing preset refusal.
 - UI selector/contact regressions: 21/21; catalog and contact API regressions: 4/4.
 - Live catalog returned 11 configured models, 19 presets, and 10 workspaces with
   no registry errors. Independent review passed; rendered browser QA unavailable.

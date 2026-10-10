@@ -1,6 +1,6 @@
 ---
 name: agents-in-the-loop
-description: Cross-session call center for DSH agents — session_message delivers messages between sessions (idle: visible wake; busy: mid-turn-safe notice), contacts is a named directory over session ids with name-only self-registration, spawn_session spawns a new persistent session with preset+model pins (config-gated). Load when a task needs to reach, register, message, or spawn another agent session.
+description: Cross-session call center for DSH agents — session_message delivers messages between sessions, contacts manages names, aitl_catalog discovers live selections, and spawn_session creates a persistent session with caller-selected provider/model/workspace/preset/permission. Load when coordinating agent sessions.
 ---
 
 # SKILL.md — agents-in-the-loop
@@ -24,12 +24,29 @@ register yourself as a contact, or handle an inbound `[session-message]`.
    "advisor" to its session id + live status in one call, message it in
    one call, and manage entries at runtime.
 3. **`spawn_session`** (only when the plugin config sets `spawn.enabled=true`)
-   — spawn a NEW persistent dsh session with a preset + config-pinned model,
-   optionally in a workspace; it is registered in contacts under `name` and
+   — spawn a NEW persistent dsh session with explicit provider, model, preset,
+   and permission; select a registered workspace or use the caller binding.
+   It is registered in contacts under `name` and
    gets your `message` as its first task brief. Persistent co-worker, NOT a
    1-shot subagent.
 
 ## Tool reference
+
+### Dynamic spawn selections
+
+Call `aitl_catalog {}` to discover current provider/model IDs, supported
+reasoning efforts, presets, workspaces, and permissions. Then call:
+
+```json
+{"name":"<contact-name>","message":"<brief>","provider":"<provider-id>","model":"<model-id>","preset":"<preset-id>","permission":"<permission-id>","workspaceId":"<workspace-id>"}
+```
+
+These are `spawn_session` arguments. `reasoningEffort` is optional and validated
+against the selected model. Choices are checked on every call; missing or
+unsupported choices fail. An omitted workspace requires a caller binding.
+Owner permission/preset/workspace policies and seat limits remain enforced.
+Retired spawn model/preset config keys do not pin selections. Reconnect clients
+after upgrade to refresh the changed MCP schema.
 
 ### session_message
 

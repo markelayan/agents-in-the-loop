@@ -67,7 +67,8 @@ const identity = { name: 'codex', identity: true, kind: 'local', sessionId: 'ses
 function contactsResponse({ path, method }) {
   if (method !== 'GET') return { body: { ok: true } }
   if (path === '/contacts') return { body: { contacts: [identity] } }
-  if (path === '/config') return { body: { effective: { identities: { enabled: true, preset: 'standard', allowedPermissions: ['read-only', 'full'] } } } }
+  if (path === '/config') return { body: { effective: { identities: { enabled: true, preset: 'standard', allowedPermissions: ['read-only', 'workspace-write'] } } } }
+  if (path === '/catalog') return { body: { permissions: ['read-only', 'workspace-write'], errors: {} } }
   if (path === '/identities') return { body: { identities: [{ name: identity.name, workspaceId: ws.id, live: true }] } }
   if (path === '/workspaces') return { body: { workspaces: [ws] } }
   throw new Error(`Unexpected request ${path}`)
@@ -144,10 +145,10 @@ test('reprovision can explicitly change workspace and permission together', asyn
   tree = ui.render(ui.contacts, props)
   const selects = ui.find(tree, (n) => n.type === 'select')
   selects[0].props.onChange({ target: { value: ws.id } })
-  selects[1].props.onChange({ target: { value: 'full' } })
+  selects[1].props.onChange({ target: { value: 'workspace-write' } })
   tree = ui.render(ui.contacts, props)
   await ui.find(tree, (n) => n.type === 'form')[0].props.onSubmit({ preventDefault() {} })
-  assert.deepEqual(ui.requests.find((r) => r.method === 'PUT').body, { name: 'codex', workspaceId: ws.id, permission: 'full' })
+  assert.deepEqual(ui.requests.find((r) => r.method === 'PUT').body, { name: 'codex', workspaceId: ws.id, permission: 'workspace-write' })
 })
 
 test('identity service errors are surfaced and lifecycle actions disabled', async () => {
@@ -205,29 +206,30 @@ test('disabled inbox shows capability guidance without querying the mailbox rout
   assert.equal(ui.find(tree, (n) => n.type === 'form').length, 0)
 })
 
-test('blank identity preset warns about unverified fallback before provisioning', async () => {
+test('blank identity preset requires an installed choice without claiming a fallback', async () => {
   const ui = harness((request) => request.path === '/config'
     ? { body: { effective: { identities: { enabled: true, preset: '', allowedPermissions: ['read-only'] } } } }
     : contactsResponse(request))
   const tree = await ui.initialize(ui.contacts, props)
   assert.ok(ui.find(tree, (n) => n.type?.name === 'Notice').some((n) =>
-    n.props.text.includes('aitl-identity') && n.props.text.includes('has not been verified') && n.props.text.includes('identities.preset')))
-  assert.ok(ui.find(tree, (n) => n.type === 'span' && n.children.includes('Preset: aitl-identity (fallback; unverified)')).length)
+    n.props.text.includes('Choose an installed preset') && n.props.text.includes('identities.preset') && !n.props.text.includes('fallback')))
+  assert.ok(ui.find(tree, (n) => n.type === 'span' && n.children.includes('Preset: not configured')).length)
   assert.equal(ui.find(tree, (n) => n.type === 'button' && n.children.includes('+ New identity'))[0].props.disabled, true)
   assert.equal(ui.find(tree, (n) => n.type === 'button' && n.children.includes('Re-provision'))[0].props.disabled, true)
   assert.equal(ui.find(tree, (n) => n.type === 'button' && n.children.includes('Dispose'))[0].props.disabled, false)
 })
 
 const catalog = {
-  models: [{ provider: 'provider-a', model: 'model-a', label: 'Model A' }, { provider: 'provider-b', model: 'model-b', label: 'Model B' }],
+  models: [{ provider: 'provider-a', model: 'model-a', label: 'Model A', reasoningEfforts: [{ id: 'low', name: 'Low' }, { id: 'high', name: 'High' }] },
+    { provider: 'provider-b', model: 'model-b', label: 'Model B', reasoningEfforts: [] }],
   presets: [{ id: 'standard', title: 'Standard' }], workspaces: [ws], permissions: ['read-only', 'workspace-write'], errors: {},
 }
-const configTree = { spawn: { provider: 'provider-a', model: 'model-a', preset: 'standard', allowedModels: ['provider-a/model-a'], workspaces: [ws.id] },
-  identities: { provider: '', model: '', preset: 'standard', allowedPermissions: ['read-only'] },
+const configTree = { spawn: { preset: 'standard', workspaces: [ws.id] },
+  identities: { provider: 'provider-a', model: 'model-a', reasoningEffort: '', preset: 'standard', allowedPermissions: ['read-only'] },
   mc: { provider: 'provider-a', model: 'model-a', projects: { sample: { workspaceId: ws.id, model: { provider: 'provider-b', model: 'model-b' } } } } }
-async function configUI(overrides = {}) {
+async function configUI(overrides = {}, effective = configTree) {
   const ui = harness(({ path }) => {
-    if (path === '/config') return { body: { effective: configTree, overrides: {}, restartRequired: [] } }
+    if (path === '/config') return { body: { effective, overrides: {}, restartRequired: [] } }
     if (path === '/catalog') return { body: { ok: true, ...catalog, ...overrides } }
     throw new Error(`Unexpected request ${path}`)
   })
@@ -237,7 +239,7 @@ async function configUI(overrides = {}) {
 
 test('semantic configuration uses live system choices including nested MC paths', async () => {
   const { ui, rows } = await configUI()
-  for (const path of ['spawn.provider', 'spawn.model', 'spawn.preset', 'spawn.allowedModels', 'spawn.workspaces', 'identities.model', 'identities.provider', 'identities.allowedPermissions', 'mc.projects.sample.workspaceId', 'mc.projects.sample.model.provider', 'mc.projects.sample.model.model']) {
+  for (const path of ['spawn.workspaces', 'identities.preset', 'identities.model', 'identities.provider', 'identities.reasoningEffort', 'identities.allowedPermissions', 'mc.projects.sample.workspaceId', 'mc.projects.sample.model.provider', 'mc.projects.sample.model.model']) {
     const row = rows.find((n) => n.props.row.path === path)
     assert.ok(row, path)
     const tree = ui.mount(row.type, row.props)
@@ -248,8 +250,8 @@ test('semantic configuration uses live system choices including nested MC paths'
 
 test('model choices follow edited provider and require provider save first', async () => {
   const { ui, rows } = await configUI()
-  const row = rows.find((n) => n.props.row.path === 'spawn.model')
-  const tree = ui.mount(row.type, { ...row.props, drafts: { 'spawn.provider': 'provider-b' } })
+  const row = rows.find((n) => n.props.row.path === 'identities.model')
+  const tree = ui.mount(row.type, { ...row.props, drafts: { 'identities.provider': 'provider-b' } })
   const select = ui.find(tree, (n) => n.type === 'select')[0]
   assert.ok(select.children.some((n) => n.props.value === 'model-b' && !n.props.disabled))
   assert.ok(select.children.some((n) => n.props.value === 'model-a' && n.props.disabled && n.children[0].includes('unavailable')))
@@ -258,7 +260,7 @@ test('model choices follow edited provider and require provider save first', asy
 
 test('catalog errors disable choices and never become selectable values', async () => {
   const { ui, rows } = await configUI({ models: [], errors: { models: 'Model registry unavailable' } })
-  const row = rows.find((n) => n.props.row.path === 'spawn.model')
+  const row = rows.find((n) => n.props.row.path === 'identities.model')
   const tree = ui.mount(row.type, row.props)
   const select = ui.find(tree, (n) => n.type === 'select')[0]
   assert.equal(select.props.disabled, true)
@@ -268,10 +270,51 @@ test('catalog errors disable choices and never become selectable values', async 
 
 test('partial catalog failure preserves available model choices', async () => {
   const { ui, rows } = await configUI({ errors: { models: 'One provider is unavailable' } })
-  const row = rows.find((n) => n.props.row.path === 'spawn.model')
+  const row = rows.find((n) => n.props.row.path === 'identities.model')
   const tree = ui.mount(row.type, row.props)
   assert.equal(ui.find(tree, (n) => n.type === 'select')[0].props.disabled, false)
   assert.ok(ui.find(tree, (n) => n.type === 'option').some((n) => n.props.value === 'model-a'))
+})
+
+test('reasoning effort choices come from selected model metadata', async () => {
+  const { ui, rows } = await configUI()
+  const row = rows.find((n) => n.props.row.path === 'identities.reasoningEffort')
+  const tree = ui.mount(row.type, row.props)
+  const select = ui.find(tree, (n) => n.type === 'select')[0]
+  assert.ok(select.children.some((n) => n.props?.value === 'low' && n.children[0] === 'Low'))
+  assert.ok(select.children.some((n) => n.props?.value === 'high' && n.children[0] === 'High'))
+  assert.ok(select.children.every((n) => n.props?.value !== 'medium'))
+})
+
+test('model with no effort overrides can clear a previously unavailable effort', async () => {
+  const { ui, rows } = await configUI()
+  const row = rows.find((n) => n.props.row.path === 'identities.reasoningEffort')
+  const rowProps = { ...row.props, row: { path: row.props.row.path, value: 'old-effort' },
+    tree: { identities: { provider: 'provider-b', model: 'model-b' } }, onDraft() {} }
+  let tree = ui.mount(row.type, rowProps)
+  const select = ui.find(tree, (n) => n.type === 'select')[0]
+  assert.equal(select.props.disabled, false)
+  assert.ok(select.children.some((n) => n.props?.value === 'old-effort' && n.props.disabled))
+  select.props.onChange({ target: { value: '' } })
+  tree = ui.render(row.type, rowProps)
+  assert.equal(ui.find(tree, (n) => n.type === 'button' && n.children.includes('Save'))[0].props.disabled, false)
+})
+
+test('permission service failure supplies no permission choices or valid save', async () => {
+  const { ui, rows } = await configUI({ permissions: [], errors: { permissions: 'Permission service unavailable' } })
+  const row = rows.find((n) => n.props.row.path === 'identities.allowedPermissions')
+  const tree = ui.mount(row.type, row.props)
+  const select = ui.find(tree, (n) => n.type === 'select')[0]
+  assert.equal(select.props.disabled, true)
+  assert.ok(select.children.every((n) => !n.props || n.props.disabled))
+  assert.equal(ui.find(tree, (n) => n.type === 'button' && n.children.includes('Save'))[0].props.disabled, true)
+})
+
+test('configuration omits spawn model pins and explains per-call spawning', async () => {
+  const { ui, tree, rows } = await configUI({}, { ...configTree,
+    spawn: { ...configTree.spawn, provider: 'retired-provider', model: 'retired-model', allowedModels: ['retired-provider/retired-model'], reasoningEffort: 'retired-effort' } })
+  assert.ok(rows.every((n) => !['spawn.provider', 'spawn.model', 'spawn.preset', 'spawn.allowedModels', 'spawn.reasoningEffort'].includes(n.props.row.path)))
+  assert.ok(ui.find(tree, (n) => n.type?.name === 'Notice').some((n) => n.props.text.includes('per MCP call')))
 })
 
 test('allowlists use multiple selection and support clearing unavailable values', async () => {
@@ -344,4 +387,44 @@ test('invalid legacy external ID blocks contact creation before API submission',
   assert.ok(!ui.requests.some((r) => r.method === 'POST'))
   tree = ui.render(ui.contacts, contactProps)
   assert.ok(ui.find(tree, (n) => n.type?.name === 'ErrorBanner').some((n) => n.props.error?.includes('lowercase')))
+})
+
+test('identity provision permission choices intersect live catalog with owner policy', async () => {
+  const ui = harness((request) => request.path === '/catalog'
+    ? { body: { permissions: ['read-only', 'danger-full-access'], errors: {} } }
+    : contactsResponse(request))
+  let tree = await ui.initialize(ui.contacts, props)
+  ui.find(tree, (n) => n.type === 'button' && n.children.includes('+ New identity'))[0].props.onClick()
+  tree = ui.render(ui.contacts, props)
+  const permissionSelect = ui.find(tree, (n) => n.type === 'select').find((n) => n.children.some((o) => o.props?.value === 'read-only'))
+  assert.ok(permissionSelect)
+  assert.ok(!permissionSelect.children.some((o) => ['workspace-write', 'danger-full-access'].includes(o.props?.value)))
+})
+
+test('identity permission service failure does not invent provisioning choices', async () => {
+  const ui = harness((request) => request.path === '/catalog'
+    ? { body: { permissions: [], errors: { permissions: 'Permission service unavailable' } } }
+    : contactsResponse(request))
+  let tree = await ui.initialize(ui.contacts, props)
+  assert.ok(ui.find(tree, (n) => n.type?.name === 'Notice').some((n) => n.props.text === 'Permission service unavailable'))
+  ui.find(tree, (n) => n.type === 'button' && n.children.includes('+ New identity'))[0].props.onClick()
+  tree = ui.render(ui.contacts, props)
+  assert.ok(!ui.find(tree, (n) => n.type === 'option').some((n) => n.props.value === 'read-only' && !n.props.disabled))
+  assert.equal(ui.find(tree, (n) => n.type === 'button' && n.children.includes('Provision'))[0].props.disabled, true)
+})
+
+test('unavailable saved identity permission stays visible and requires replacement', async () => {
+  const ui = harness((request) => request.path === '/contacts'
+    ? { body: { contacts: [{ ...identity, identityMeta: { permission: 'retired-permission' } }] } }
+    : contactsResponse(request))
+  let tree = await ui.initialize(ui.contacts, props)
+  assert.ok(ui.find(tree, (n) => n.type === 'div' && n.children.includes('retired-permission (unavailable)')).length)
+  ui.find(tree, (n) => n.type === 'button' && n.children.includes('Re-provision'))[0].props.onClick()
+  tree = ui.render(ui.contacts, props)
+  assert.equal(ui.find(tree, (n) => n.type === 'button' && n.children.includes('Confirm re-provision'))[0].props.disabled, true)
+  const select = ui.find(tree, (n) => n.type === 'select').find((n) => n.children.some((o) => o.props?.value === 'read-only'))
+  assert.ok(select.children.some((o) => o.props?.value === '' && o.props.disabled && o.children[0].includes('unavailable')))
+  select.props.onChange({ target: { value: 'read-only' } })
+  tree = ui.render(ui.contacts, props)
+  assert.equal(ui.find(tree, (n) => n.type === 'button' && n.children.includes('Confirm re-provision'))[0].props.disabled, false)
 })

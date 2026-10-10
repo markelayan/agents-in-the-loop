@@ -65,6 +65,14 @@ function exists(p) { try { return readFileSync(p, 'utf8').length >= 0 } catch { 
 
 const baseConfig = { identities: { preset: 'aitl-identity' }, spawn: { provider: 'zai-coding-cn', model: 'glm-5.3-flash' } }
 
+test('missing identity preset refuses before spawning rather than inventing a preset', async () => {
+  const t = makeDeps()
+  const r = await createIdentityManager(t.deps).register('codex', 'ws-1')
+  assert.equal(r.ok, false)
+  assert.match(r.error, /identity preset required/)
+  assert.equal(t.calls.spawn.length, 0)
+})
+
 test('seatsUsed skips contacts flagged identity:true', () => {
   const agents = { get: (id) => (id === 'session-live' ? { id } : null) }
   const contacts = {

@@ -49,6 +49,7 @@ function makeCtx({ agentsExtra = {}, faces = {}, config = {} } = {}) {
       if (name === 'sessions') return faces.sessions
       if (name === 'sessionTitle') return faces.sessionTitle
       if (name === 'permissionPresets') return faces.permissionPresets
+      if (name === 'llm') return faces.llm
       return undefined
     },
     on: () => () => {},
@@ -62,18 +63,21 @@ function makeCtx({ agentsExtra = {}, faces = {}, config = {} } = {}) {
 }
 
 const defaultFaces = {
+  llm: { listProviders: () => [{ id: 'zai-coding-cn' }, { id: 'other' }],
+    listModels: async (provider) => [{ id: provider === 'other' ? 'other-model' : 'glm-5.3-flash', reasoning: { efforts: [{ id: 'high' }] } }] },
   presets: {
     resolve: async (id) => ({ id: `preset-${id}` }),
     mount: async () => {},
   },
   sessions: { get: () => ({}) },
   sessionTitle: { rename: () => {} },
-  permissionPresets: { set: () => {} },
+  permissionPresets: { catalog: () => ({ defaultOptions: [{ value: 'read-only' }, { value: 'workspace-write' }] }), set: () => {} },
+  wsRegistry: { get: (id) => id === 'ws-1' ? { id, path: '/tmp/ws-ws-1', attachSession: async () => {} } : undefined },
 }
 
 const baseConfig = { spawn: { enabled: true, preset: 'engineer' } }
 const spawn = (tools, from, args) =>
-  tools.spawn_session.execute(args, { agent: { id: from } }).then((r) => JSON.parse(r.text))
+  tools.spawn_session.execute({ provider: 'zai-coding-cn', model: 'glm-5.3-flash', preset: 'engineer', permission: 'read-only', workspaceId: 'ws-1', ...args }, { agent: { id: from } }).then((r) => JSON.parse(r.text))
 
 test('kill-switch off: tool not registered', () => {
   const { tools } = makeCtx({ config: { spawn: { enabled: false } }, faces: defaultFaces })
@@ -133,12 +137,13 @@ test('seat cap reached: rejected, no create', async () => {
   assert.equal(agents.created.length, 0)
 })
 
-test('model/provider tool args rejected with config pointer', async () => {
+test('explicit provider/model selection overrides legacy configuration and is recorded', async () => {
   const { tools, agents } = makeCtx({ config: baseConfig, faces: defaultFaces })
-  const r = await spawn(tools, 'session-leader', { name: 'w', message: 'm', model: 'gpt-6-luna' })
-  assert.equal(r.ok, false)
-  assert.match(r.error, /spawn\.provider\/spawn\.model/)
-  assert.equal(agents.created.length, 0)
+  const r = await spawn(tools, 'session-leader', { name: 'w', message: 'm', provider: 'other', model: 'other-model', reasoningEffort: 'high' })
+  assert.equal(r.ok, true, r.error)
+  assert.equal(agents.created[0].agentOptions.provider, 'other')
+  assert.equal(agents.created[0].agentOptions.model, 'other-model')
+  assert.equal(agents.created[0].agentOptions.reasoningEffort, 'high')
 })
 
 test('preset not in allowlist rejected', async () => {
@@ -154,9 +159,9 @@ test('preset not in allowlist rejected', async () => {
 
 test('no preset anywhere: explicit error, never a bare shell', async () => {
   const { tools, agents } = makeCtx({ config: { spawn: { enabled: true } }, faces: defaultFaces })
-  const r = await spawn(tools, 'session-leader', { name: 'w', message: 'm' })
+  const r = await spawn(tools, 'session-leader', { name: 'w', message: 'm', preset: undefined })
   assert.equal(r.ok, false)
-  assert.match(r.error, /no preset/)
+  assert.match(r.error, /preset required/)
   assert.equal(agents.created.length, 0)
 })
 
@@ -186,7 +191,7 @@ test('create failure (preset resolve throws): clean error, nothing registered', 
 })
 
 test('agentPresets face missing: refused (no bare default shell)', async () => {
-  const { tools, agents } = makeCtx({ config: baseConfig, faces: {} })
+  const { tools, agents } = makeCtx({ config: baseConfig, faces: { ...defaultFaces, presets: undefined } })
   const r = await spawn(tools, 'session-leader', { name: 'w', message: 'm' })
   assert.equal(r.ok, false)
   assert.match(r.error, /agentPresets face unavailable/)
@@ -197,7 +202,7 @@ test('permission arg applied via permissionPresets when faces exist', async () =
   let setArgs = null
   const { tools, agents } = makeCtx({
     config: { ...baseConfig, spawn: { ...baseConfig.spawn, allowedPermissions: ['read-only', 'workspace-write'] } },
-    faces: { ...defaultFaces, permissionPresets: { set: (s, p) => { setArgs = p } } },
+    faces: { ...defaultFaces, permissionPresets: { ...defaultFaces.permissionPresets, set: (s, p) => { setArgs = p } } },
   })
   const r = await spawn(tools, 'session-leader', { name: 'w', message: 'm', permission: 'workspace-write' })
   assert.equal(r.ok, true, r.error)
@@ -217,7 +222,7 @@ test('caller workspace auto-attach: no workspaceId → exec header cwd resolved 
   const { tools, agents } = makeCtx({ config: { ...baseConfig, spawn: { ...baseConfig.spawn, workspaces: ['ws-2'] } }, faces })
   // spawn() helper passes exec.agent = { id } only; call execute directly with the session header
   const r = JSON.parse((await tools.spawn_session.execute(
-    { name: 'w-auto', message: 'm' },
+    { name: 'w-auto', message: 'm', provider: 'zai-coding-cn', model: 'glm-5.3-flash', preset: 'engineer', permission: 'read-only' },
     { agent: { id: 'session-leader', session: { header: { cwd: '/tmp/ws-ws-1' } } } },
   ).then((x) => x.text)))
   assert.equal(r.ok, true, r.error)
@@ -227,19 +232,18 @@ test('caller workspace auto-attach: no workspaceId → exec header cwd resolved 
   assert.equal(attached.length, 1)
 })
 
-test('no caller header and no workspaceId: still spawns, ungrouped (explicit null)', async () => {
+test('no caller header and no workspaceId: refuses ungrouped creation', async () => {
   const { tools, agents } = makeCtx({ config: baseConfig, faces: defaultFaces })
-  const r = await spawn(tools, 'session-unknown', { name: 'w-nogroup', message: 'm' })
-  assert.equal(r.ok, true, r.error)
-  assert.equal(r.workspaceId, null)
-  assert.equal(r.workspaceAuto, false)
-  assert.equal(agents.created[0].meta.cwd, undefined)
+  const r = await spawn(tools, 'session-unknown', { name: 'w-nogroup', message: 'm', workspaceId: undefined })
+  assert.equal(r.ok, false)
+  assert.match(r.error, /workspaceId required/)
+  assert.equal(agents.created.length, 0)
 })
 
 test('requested permission that cannot be applied: fail closed, session disposed', async () => {
   const { tools, agents } = makeCtx({
     config: { ...baseConfig, spawn: { ...baseConfig.spawn, allowedPermissions: ['read-only', 'workspace-write'] } },
-    faces: { ...defaultFaces, permissionPresets: undefined, sessions: undefined },
+    faces: { ...defaultFaces, permissionPresets: { catalog: defaultFaces.permissionPresets.catalog }, sessions: undefined },
   })
   const r = await spawn(tools, 'session-leader', { name: 'w-perm', message: 'm', permission: 'workspace-write' })
   assert.equal(r.ok, false)
@@ -258,13 +262,41 @@ test('failed first-message delivery: rollback — disposed, contact removed', as
   assert.equal(stored['w-del'], undefined)
 })
 
-test('pinned model not in spawn.allowedModels: config error, no create', async () => {
+test('legacy configured model allowlist does not pin or block registered call selections', async () => {
   const { tools, agents } = makeCtx({
     config: { ...baseConfig, spawn: { ...baseConfig.spawn, allowedModels: ['other/model'] } },
     faces: defaultFaces,
   })
   const r = await spawn(tools, 'session-leader', { name: 'w-model', message: 'm' })
-  assert.equal(r.ok, false)
-  assert.match(r.error, /not in spawn.allowedModels/)
+  assert.equal(r.ok, true, r.error)
+  assert.equal(agents.created.length, 1)
+})
+
+test('missing pair, invalid registry choices and unsupported effort fail before creation', async () => {
+  const { tools, agents } = makeCtx({ config: baseConfig, faces: defaultFaces })
+  assert.ok(tools.spawn_session.parameters.required.includes('provider'))
+  assert.ok(tools.spawn_session.parameters.required.includes('model'))
+  for (const args of [
+    { name: 'missing', message: 'm' },
+    { name: 'provider', message: 'm', provider: 'unknown', model: 'glm-5.3-flash' },
+    { name: 'model', message: 'm', provider: 'other', model: 'glm-5.3-flash' },
+    { name: 'effort', message: 'm', provider: 'other', model: 'other-model', reasoningEffort: 'unsupported' },
+  ]) {
+    const r = JSON.parse((await tools.spawn_session.execute(args, { agent: { id: 'session-leader' } })).text)
+    assert.equal(r.ok, false)
+    assert.match(r.error, /model selection failed/)
+  }
   assert.equal(agents.created.length, 0)
+})
+
+test('live model registry refresh controls each call and unavailable registry fails closed', async () => {
+  let enabled = true
+  const { tools, agents } = makeCtx({ config: baseConfig, faces: { ...defaultFaces,
+    llm: { listProviders: () => [{ id: 'other' }], listModels: async () => enabled ? [{ id: 'other-model' }] : [] } } })
+  assert.equal((await spawn(tools, 'session-leader', { name: 'one', message: 'm', provider: 'other', model: 'other-model' })).ok, true)
+  enabled = false
+  assert.equal((await spawn(tools, 'session-leader', { name: 'two', message: 'm', provider: 'other', model: 'other-model' })).ok, false)
+  assert.equal(agents.created.length, 1)
+  const missing = makeCtx({ config: baseConfig, faces: { ...defaultFaces, llm: undefined } })
+  assert.match((await spawn(missing.tools, 'session-leader', { name: 'three', message: 'm' })).error, /registry unavailable/)
 })
