@@ -3,6 +3,9 @@
 ## v1.11.1 — release candidate (2026-10-10, not published)
 
 ### Fixed
+- Contact editor rename and clearing workspace/label/tags/note; workspace choices
+  now persist through the API and arbitrary unregistered paths are rejected.
+- Legacy external contact input validation matches the server's bounded ID format.
 - SQLite schema v3 persists workspace and identity metadata; recovers generated
   legacy provisioning notes and preserves bindings during re-provision.
 - Identity replies route into inbox across delivery paths; ordinary sessions
@@ -12,6 +15,9 @@
   a retained database handle, and the UI avoids blind JSON parsing.
 
 ### Changed
+- System registry catalog and UI selectors for configured models, providers,
+  presets, workspaces, and permissions instead of manually typed identifiers.
+  Missing registry choices and saved unavailable values are shown explicitly.
 - Compact panel styling, dedicated Identities tab, workspace and permissions,
   preset diagnostics, and collapsible lifecycle forms.
 - Panel provisioning requires an explicit preset; inbox restart guidance added.

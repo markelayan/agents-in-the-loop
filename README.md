@@ -113,7 +113,7 @@ but fully in-process (host `agents.create` + `agentPresets` resolve/mount +
 
 - args: `name` (contacts name for the new session) + `message` (first task
   brief, delivered once via the shared engine); optional `preset`
-  (default `spawn.preset`), `workspaceId` (must be allowlisted),
+  (default `spawn.preset`), `workspaceId` (checked against a nonempty allowlist),
   `permission` (`read-only` default; must be in `spawn.allowedPermissions`),
   `wake` (default true).
 - The model is pinned by config (`spawn.provider/model`) and CANNOT be
@@ -201,7 +201,7 @@ One row (all keys optional, defaults shown):
           provider: zai-coding-cn # model pin — CONFIG-ONLY, never a tool arg
           model: glm-5.3-flash
           allowedModels: [zai-coding-cn/glm-5.3-flash, openai-codex/gpt-6-luna]
-          workspaces: []          # workspace-id allowlist; empty = caller default
+          workspaces: []          # empty removes explicit workspace allowlist; omitted arg uses caller
           allowedPermissions: [read-only]
           stateFile: '~/.dsh/spawned-sessions.json'  # JSONL audit journal
 ```
@@ -565,6 +565,12 @@ credentials, session IDs, or enabled testing overrides.
   nothing in v1.9/v1.10 makes outbound calls.
 
 ## Release checks and known limits
+
+The Config panel loads available models, providers, presets, and workspaces
+from DSH's registries via the read-only `/api/agents-in-the-loop/catalog` API.
+Choose registered entries rather than typing IDs. Refresh after changing host
+providers or presets. Unavailable saved values remain visible for diagnosis;
+registry errors do not silently substitute defaults.
 
 - Use a current Node 22 release with `node:sqlite` available, or newer Node.
   The engine minimum alone does not ensure an early Node 22 has this module.

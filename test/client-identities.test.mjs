@@ -45,10 +45,13 @@ function harness(respond) {
   // extracting the Contacts function, then reset hooks for that component.
   hooks[0] = 'contacts'
   const contacts = find(render(app), (n) => n.type?.name === 'ContactsTab')[0].type
+  hooks[0] = 'config'
+  const config = find(render(app), (n) => n.type?.name === 'ConfigTab')[0].type
   const inbox = find(appTree, (n) => n.type?.name === 'InboxTab')[0].type
   hooks = []; effects = []; first = true
   return {
-    requests, render, find, contacts, inbox,
+    requests, render, find, contacts, inbox, config,
+    mount(component, props) { hooks = []; effects = []; first = true; return render(component, props) },
     async initialize(component, props) {
       render(component, props)
       for (const effect of effects) effect()
@@ -204,4 +207,132 @@ test('blank identity preset warns about unverified fallback before provisioning'
   assert.equal(ui.find(tree, (n) => n.type === 'button' && n.children.includes('+ New identity'))[0].props.disabled, true)
   assert.equal(ui.find(tree, (n) => n.type === 'button' && n.children.includes('Re-provision'))[0].props.disabled, true)
   assert.equal(ui.find(tree, (n) => n.type === 'button' && n.children.includes('Dispose'))[0].props.disabled, false)
+})
+
+const catalog = {
+  models: [{ provider: 'provider-a', model: 'model-a', label: 'Model A' }, { provider: 'provider-b', model: 'model-b', label: 'Model B' }],
+  presets: [{ id: 'standard', title: 'Standard' }], workspaces: [ws], permissions: ['read-only', 'workspace-write'], errors: {},
+}
+const configTree = { spawn: { provider: 'provider-a', model: 'model-a', preset: 'standard', allowedModels: ['provider-a/model-a'], workspaces: [ws.id] },
+  identities: { provider: '', model: '', preset: 'standard', allowedPermissions: ['read-only'] },
+  mc: { provider: 'provider-a', model: 'model-a', projects: { sample: { workspaceId: ws.id, model: { provider: 'provider-b', model: 'model-b' } } } } }
+async function configUI(overrides = {}) {
+  const ui = harness(({ path }) => {
+    if (path === '/config') return { body: { effective: configTree, overrides: {}, restartRequired: [] } }
+    if (path === '/catalog') return { body: { ok: true, ...catalog, ...overrides } }
+    throw new Error(`Unexpected request ${path}`)
+  })
+  const tree = await ui.initialize(ui.config, props)
+  return { ui, tree, rows: ui.find(tree, (n) => n.type?.name === 'ConfigRow') }
+}
+
+test('semantic configuration uses live system choices including nested MC paths', async () => {
+  const { ui, rows } = await configUI()
+  for (const path of ['spawn.provider', 'spawn.model', 'spawn.preset', 'spawn.allowedModels', 'spawn.workspaces', 'identities.model', 'identities.provider', 'identities.allowedPermissions', 'mc.projects.sample.workspaceId', 'mc.projects.sample.model.provider', 'mc.projects.sample.model.model']) {
+    const row = rows.find((n) => n.props.row.path === path)
+    assert.ok(row, path)
+    const tree = ui.mount(row.type, row.props)
+    assert.equal(ui.find(tree, (n) => n.type === 'select').length, 1, path)
+    assert.equal(ui.find(tree, (n) => n.type === 'input' && n.props.type === 'text').length, 0, path)
+  }
+})
+
+test('model choices follow edited provider and require provider save first', async () => {
+  const { ui, rows } = await configUI()
+  const row = rows.find((n) => n.props.row.path === 'spawn.model')
+  const tree = ui.mount(row.type, { ...row.props, drafts: { 'spawn.provider': 'provider-b' } })
+  const select = ui.find(tree, (n) => n.type === 'select')[0]
+  assert.ok(select.children.some((n) => n.props.value === 'model-b' && !n.props.disabled))
+  assert.ok(select.children.some((n) => n.props.value === 'model-a' && n.props.disabled && n.children[0].includes('unavailable')))
+  assert.equal(ui.find(tree, (n) => n.type === 'button' && n.children.includes('Save'))[0].props.disabled, true)
+})
+
+test('catalog errors disable choices and never become selectable values', async () => {
+  const { ui, rows } = await configUI({ models: [], errors: { models: 'Model registry unavailable' } })
+  const row = rows.find((n) => n.props.row.path === 'spawn.model')
+  const tree = ui.mount(row.type, row.props)
+  const select = ui.find(tree, (n) => n.type === 'select')[0]
+  assert.equal(select.props.disabled, true)
+  assert.ok(select.children.every((n) => n.props.value !== 'Model registry unavailable'))
+  assert.equal(ui.find(tree, (n) => n.type === 'button' && n.children.includes('Save'))[0].props.disabled, true)
+})
+
+test('partial catalog failure preserves available model choices', async () => {
+  const { ui, rows } = await configUI({ errors: { models: 'One provider is unavailable' } })
+  const row = rows.find((n) => n.props.row.path === 'spawn.model')
+  const tree = ui.mount(row.type, row.props)
+  assert.equal(ui.find(tree, (n) => n.type === 'select')[0].props.disabled, false)
+  assert.ok(ui.find(tree, (n) => n.type === 'option').some((n) => n.props.value === 'model-a'))
+})
+
+test('allowlists use multiple selection and support clearing unavailable values', async () => {
+  const { ui, rows } = await configUI()
+  const row = rows.find((n) => n.props.row.path === 'spawn.workspaces')
+  const rowProps = { ...row.props, row: { path: row.props.row.path, value: ['missing-workspace'] }, onDraft() {} }
+  let tree = ui.mount(row.type, rowProps)
+  assert.equal(ui.find(tree, (n) => n.type === 'select')[0].props.multiple, true)
+  assert.equal(ui.find(tree, (n) => n.type === 'button' && n.children.includes('Save'))[0].props.disabled, true)
+  ui.find(tree, (n) => n.type === 'button' && n.children.includes('Clear selection'))[0].props.onClick()
+  tree = ui.render(row.type, rowProps)
+  assert.equal(ui.find(tree, (n) => n.type === 'button' && n.children.includes('Save'))[0].props.disabled, false)
+})
+
+test('contact editor chooses registered sessions and workspace paths', async () => {
+  const ui = harness(contactsResponse)
+  const contactProps = { ...props, mode: 'contacts', sessions: [{ id: 'session-one', title: 'Maintainer', status: 'active' }] }
+  let tree = await ui.initialize(ui.contacts, contactProps)
+  ui.find(tree, (n) => n.type === 'button' && n.children.includes('+ Add contact'))[0].props.onClick()
+  tree = ui.render(ui.contacts, contactProps)
+  const selects = ui.find(tree, (n) => n.type === 'select')
+  assert.ok(selects.some((s) => s.children.some((o) => o.props?.value === 'session-one')))
+  assert.ok(selects.some((s) => s.children.some((o) => o.props?.value === ws.path && o.children[0] === `${ws.title} · ${ws.path}`)))
+  assert.equal(ui.find(tree, (n) => n.type === 'input' && n.props.placeholder === '/path/to/workspace').length, 0)
+  assert.ok(ui.find(tree, (n) => n.type === 'button' && n.children.includes('Refresh sessions')).length)
+})
+
+test('contact rename keeps original lookup name and explicitly clears workspace override', async () => {
+  const ui = harness((request) => request.path === '/contacts' && request.method === 'GET'
+    ? { body: { contacts: [{ name: 'old-name', sessionId: 'session-one', cwd: ws.path }] } }
+    : contactsResponse(request))
+  const contactProps = { ...props, mode: 'contacts', sessions: [{ id: 'session-one' }] }
+  let tree = await ui.initialize(ui.contacts, contactProps)
+  ui.find(tree, (n) => n.type === 'button' && n.children.includes('Edit'))[0].props.onClick()
+  tree = ui.render(ui.contacts, contactProps)
+  ui.find(tree, (n) => n.type === 'input' && n.props.placeholder === 'unique contact name')[0].props.onChange({ target: { value: 'new-name' } })
+  ui.find(tree, (n) => n.type === 'select' && n.props.value === ws.path)[0].props.onChange({ target: { value: '' } })
+  tree = ui.render(ui.contacts, contactProps)
+  await ui.find(tree, (n) => n.type === 'form')[0].props.onSubmit({ preventDefault() {} })
+  assert.deepEqual(ui.requests.find((r) => r.method === 'PUT').body, { name: 'old-name', rename: 'new-name', sessionId: 'session-one', cwd: '', label: '', tags: [], note: '' })
+})
+
+test('create contact submits the selected session and registered workspace path', async () => {
+  const ui = harness(contactsResponse)
+  const contactProps = { ...props, mode: 'contacts', sessions: [{ id: 'session-one' }] }
+  let tree = await ui.initialize(ui.contacts, contactProps)
+  ui.find(tree, (n) => n.type === 'button' && n.children.includes('+ Add contact'))[0].props.onClick()
+  tree = ui.render(ui.contacts, contactProps)
+  ui.find(tree, (n) => n.type === 'input' && n.props.placeholder === 'unique contact name')[0].props.onChange({ target: { value: 'new-contact' } })
+  const selects = ui.find(tree, (n) => n.type === 'select')
+  selects[0].props.onChange({ target: { value: 'session-one' } })
+  selects[1].props.onChange({ target: { value: ws.path } })
+  tree = ui.render(ui.contacts, contactProps)
+  await ui.find(tree, (n) => n.type === 'form')[0].props.onSubmit({ preventDefault() {} })
+  assert.deepEqual(ui.requests.find((r) => r.method === 'POST').body, { name: 'new-contact', sessionId: 'session-one', cwd: ws.path, label: '', tags: [], note: '' })
+})
+
+test('invalid legacy external ID blocks contact creation before API submission', async () => {
+  const ui = harness(contactsResponse)
+  const contactProps = { ...props, mode: 'contacts' }
+  let tree = await ui.initialize(ui.contacts, contactProps)
+  ui.find(tree, (n) => n.type === 'button' && n.children.includes('+ Add contact'))[0].props.onClick()
+  tree = ui.render(ui.contacts, contactProps)
+  ui.find(tree, (n) => n.type === 'input' && n.props.placeholder === 'unique contact name')[0].props.onChange({ target: { value: 'new-contact' } })
+  ui.find(tree, (n) => n.type === 'input' && n.props.type === 'checkbox')[0].props.onChange({ target: { checked: true } })
+  tree = ui.render(ui.contacts, contactProps)
+  ui.find(tree, (n) => n.type === 'input' && n.props.placeholder === 'session-ext-…')[0].props.onChange({ target: { value: 'session-ext-Invalid_id' } })
+  tree = ui.render(ui.contacts, contactProps)
+  await ui.find(tree, (n) => n.type === 'form')[0].props.onSubmit({ preventDefault() {} })
+  assert.ok(!ui.requests.some((r) => r.method === 'POST'))
+  tree = ui.render(ui.contacts, contactProps)
+  assert.ok(ui.find(tree, (n) => n.type?.name === 'ErrorBanner').some((n) => n.props.error?.includes('lowercase')))
 })
