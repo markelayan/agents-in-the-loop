@@ -1,19 +1,16 @@
 # dsh-agents-in-the-loop
 
-> **Disclaimer:** this plugin was fully and automagically coded by
-> **GLM 5.3 Flash** (Z.ai) running inside the DeepSeek Harness agent
-> federation. **Mark Elayan is just the brains** — he directs, reviews, and
-> owns every decision; the model does the typing. :D
+Maintained by Mark Elayan with AI-assisted implementation and independent
+review. See [CHANGELOG.md](./CHANGELOG.md) for changes and validation limits.
 
 **Cross-session call center for [DeepSeek Harness (DSH)](https://github.com/deepseek-ai)
-agents.** Two model tools — `session_message` and `contacts` — plus a
-loopback-only HTTP API so agents OUTSIDE dsh (Claude Code, scripts) can
-send messages to registered contacts, and so a client panel can read and
-manage the contact directory.
+agents.** Named messaging, persistent spawning, authenticated MCP access,
+external poll/ack inboxes, and workspace identities backed by real DSH
+sessions. The web panel has Contacts, Inbox, Identities, and Config views.
 
 Formerly **taskboard-flow** — the kanban trigger/triage/task engine was
-removed in v1.0.0 (and the web UI in v1.3.0); the messaging core is
-preserved verbatim.
+removed in v1.0.0. Native task execution belongs to the separate
+`dsh-taskboard` plugin; this plugin can expose its tools through MCP.
 
 ## Features at a glance
 
@@ -22,9 +19,9 @@ preserved verbatim.
 - **`contacts`** — a named directory over session ids: resolve an alias to
   session id + label + LIVE status in one call, message it, manage entries
   at runtime (add / update / rename / remove, no config edit, no restart).
-- **External send-only HTTP API** (v1.5.0) — `POST
+- **External message HTTP API** (v1.5.0) — `POST
   /api/agents-in-the-loop/message`: loopback curl from any outside agent.
-  Externals never register, never receive, never resurrect sessions.
+  External replies use the authenticated MCP inbox described below.
 - **Contacts HTTP API** — `GET/POST/PUT/DELETE
   /api/agents-in-the-loop/contacts` + `GET /sessions` for a client panel.
 - **`spawn_session`** (v1.8.0, `spawn.enabled`, default OFF) — spawn a NEW
@@ -384,7 +381,7 @@ Codex (`[mcp_servers.aitl]` with `url` + `http_headers` in
 
 `mcp.allTools: true` exposes **every registered harness tool** through
 `tools/list` and `tools/call` — bash, file tools, taskboard, memory, all of
-it — not just this plugin's three. Enumeration probes the dsh tools
+it — not just this plugin's own tools. Enumeration probes the dsh tools
 service (`view().visible` → `list()` → `schemas()`), dedupes, and logs
 once which surface answered (`allTools enumeration: N tools via …`); a
 miss logs `NO MATCHED SURFACE` so dsh-version drift is visible. Tools that
@@ -403,7 +400,7 @@ harnesses back.
   `*.json.migrated` (import re-runs are no-ops). `contacts` and
   `session_message` read/write the DB transparently; the MC bridge and
   HTTP panel dispatch through the same accessors.
-- **Identity**: external harnesses self-assign a contact name in the
+- **Legacy identity registration**: external harnesses self-assign a contact name in the
   contact center with a sessionId of the form `session-ext-<name>` (e.g.
   `session-ext-codex`). They send every MCP POST with
   `X-Aitl-Identity: <contact-name>`; the endpoint resolves it to that
@@ -454,8 +451,9 @@ behind it; there is no anonymous maildrop.
 
 ### Workspace identities
 
-With the SQLite inbox enabled, enable `identities.enabled` in Config and
-use Contacts' **Provision workspace identity** form. Choose a new contact
+With the SQLite inbox enabled, enable `identities.enabled` in Config, set
+`identities.preset` to an installed preset, and use the **Identities** tab's
+provisioning form. Choose a new contact
 name, an explicit workspace, and an allowed permission. Existing contact
 names cannot be converted or overwritten. Enabling identities initializes
 their manager immediately; no plugin reload is needed for this toggle.
@@ -466,12 +464,53 @@ Replies to this contact go to inbox rather than waking its hidden session;
 receive them using `poll`, `peek`, and `ack` with the returned message ID.
 Ordinary local sessions do not acquire mailboxes.
 
+The internal preset fallback is `aitl-identity`; this package does not ship
+that preset. The panel requires an explicit configured preset before provision
+or re-provision. Missing presets fail provisioning. `standard` was verified in
+the test deployment; check your own installed presets. Permissions default to
+`read-only`, which does not isolate holders of the shared bearer credential.
+
+Verify selection with native `memory_status`: it must report the intended
+workspace path before reading project notes or running workspace tools. Memory
+tools have no workspace-selection argument; the identity session supplies it.
+Legacy `session-ext-*` maildrops have no real workspace session and do not
+provide this guarantee. Use owner provisioning rather than repointing contacts.
+
 SQLite schema v3 preserves `workspaceId`, `identityMeta`, and external kind.
 On upgrade it recovers workspace and permission from v2's generated
 provisioning notes, including generated orphan suffixes; manually edited
 notes may require explicit re-provisioning. Re-provision keeps the current
 workspace and permission unless an explicit replacement is supplied. Pending
 messages addressed to the previous session remain in that previous maildrop.
+
+Drain and acknowledge replies before re-provisioning or disposal. Pending
+replies are not transferred to the replacement session. Back up the database
+consistently before migration, including SQLite WAL state; copying only a live
+`.db` file is insufficient. Schema upgrades are not a supported downgrade path.
+
+### Inbox diagnostics
+
+`GET /api/agents-in-the-loop/inbox?format=json` remains registered when inbox
+is disabled and returns structured HTTP 503 with `code: inbox_disabled`.
+Enable `mcp.inbox.enabled` and restart the host. The HTML panel switch controls
+the HTML view, not the JSON route. Plain-text errors from older hosts are
+displayed as readable errors instead of being parsed blindly as JSON.
+
+### Native taskboard execution
+
+`taskboard_execute` belongs to a separate local patch of `dsh-taskboard` 0.8.7;
+it is not bundled into AITL or the upstream 0.8.7 release. With that patch loaded
+and MCP tool exposure configured, read the card and comments, then call with
+`id`, current `ifVersion`, and optional `reuseWorktree` (board Resume semantics).
+The caller must belong to the card's workspace; the card must be unblocked
+`todo`. The native pipeline uses the card's model, preset, permission, and
+isolation and returns execution and worker session IDs.
+
+`todo` is the execution eligibility marker, not proof of separate human
+approval: agents can create todo cards. Claiming with `taskboard_move` alone
+does not start this pipeline. After a timeout, inspect execution history before
+retrying a start to avoid duplicate work. Reconnect clients after tool changes;
+clients can cache schemas even though the MCP transport is stateless.
 
 ## Configuration block (added under the plugin's config)
 
@@ -496,10 +535,24 @@ mcp:
       enabled: false        # ⚠ flip true only locally
 ```
 
-⚠ **Release checklist**: the shipped defaults are the safe values
-(`enabled: false` everywhere). Testing deployments flip them in the
-bundle/live patch — remember the bundle patch OVERRIDES the live root
-overlay on conflict, and revert all TESTING flips before publishing.
+Identity configuration (under the same plugin config):
+
+```yaml
+identities:
+  enabled: false
+  preset: ''                 # configure an installed preset locally
+  maxIdentities: 8
+  model: ''                  # follows the configured spawn model pair
+  allowedPermissions: [read-only]
+```
+
+The shipped capability switches remain false. Use an id-targeted profile patch
+supported by your DSH loader; a nested `patch`/`modify` wrapper may be ignored.
+Profile config replacement can be shallow: preserve the full intended config
+rather than assuming nested merging. Verify effective config after reload.
+`identities.enabled` initializes its manager at runtime, but changing
+`mcp.inbox.enabled` requires a host restart. Never ship your local profile,
+credentials, session IDs, or enabled testing overrides.
 
 ## Dependencies & requirements (added by v1.9/v1.10)
 
@@ -510,6 +563,31 @@ overlay on conflict, and revert all TESTING flips before publishing.
   (0600). Both are personal local state, never shipped.
 - No network egress is added: the endpoint only listens on loopback, and
   nothing in v1.9/v1.10 makes outbound calls.
+
+## Release checks and known limits
+
+- Use a current Node 22 release with `node:sqlite` available, or newer Node.
+  The engine minimum alone does not ensure an early Node 22 has this module.
+- Keep MCP loopback-only and behind its bearer key. Owner panel APIs rely on
+  loopback, not that bearer header. Reverse proxies or `allowNonLoopback` can
+  defeat this boundary; public exposure needs separate authentication.
+- Shared-key holders can impersonate any identity. Workspace and permission
+  bindings are operating constraints, not tenant isolation or per-user auth.
+- Inbox bodies, contacts, and notes persist locally and may contain sensitive
+  task content. Restrict access, set retention, and exclude runtime data from
+  packages and source control. Direct messages truncate at their cap; oversized
+  inbox sends reject. Inbox delivery is at least once: handle duplicates and ack
+  only after handling. TTL expiry can remove unhandled replies.
+- Delivery success does not prove task completion. Spawning and task execution
+  may invoke configured model providers and incur charges. Enabled MC makes
+  outbound calls; local storage does not mean all task content stays on-device.
+- Back up state before upgrades. Inspect `npm pack --dry-run --json` from a clean
+  checkout and keep packaged capability switches off. Use a new package version
+  for publication. Package updates can overwrite local taskboard patches.
+- Compatibility declarations cover listed DSH releases, not every future host.
+  The reviewed candidate passed 87 plugin tests; the separate Execute patch
+  passed seven targeted tests and a live worker-to-inbox test. These do not
+  validate arbitrary models, presets, or public network exposure.
 
 ## QA trail
 

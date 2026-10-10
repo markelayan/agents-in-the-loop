@@ -1,5 +1,45 @@
 # Changelog
 
+## v1.11.1 — release candidate (2026-10-10, not published)
+
+### Fixed
+- SQLite schema v3 persists workspace and identity metadata; recovers generated
+  legacy provisioning notes and preserves bindings during re-provision.
+- Identity replies route into inbox across delivery paths; ordinary sessions
+  keep direct delivery. The identity manager initializes when enabled at runtime.
+- Structured `inbox_disabled` JSON replaces missing-route errors, including
+  enabled-to-disabled reloads; disabled reloads cannot serve inbox JSON through
+  a retained database handle, and the UI avoids blind JSON parsing.
+
+### Changed
+- Compact panel styling, dedicated Identities tab, workspace and permissions,
+  preset diagnostics, and collapsible lifecycle forms.
+- Panel provisioning requires an explicit preset; inbox restart guidance added.
+- README documents shared-key impersonation, workspace selection, migration,
+  retention, provider costs, schema caching, and separate taskboard Execute patch.
+
+### Validation and release status
+- Independent Sol review passed; plugin suite: 87/87.
+- Live Codex selected the project memory and polled/read/acked worker replies.
+- Separate taskboard patch: seven targeted tests and one successful native
+  execution with inbox reply. It is not bundled into AITL.
+- Manifest advanced to 1.11.1 for this candidate; not published to npm.
+
+## v1.11.0 (2026-10-10)
+
+- Opt-in session-backed external identities attached to a selected workspace,
+  owner provisioning/re-provisioning/disposal, and lazy resume after restart.
+- Identity permissions default to read-only.
+
+## v1.10.0
+
+- SQLite contacts and external inbox: at-least-once poll/ack delivery, threading,
+  bounded maildrops, retention, and external identity headers.
+
+## v1.9.0
+
+- Authenticated loopback MCP endpoint with optional all-tools exposure.
+
 ## v1.8.0 (2026-10-08)
 
 **Feature: `spawn_session` tool — in-process spawning of persistent dsh sessions (`spawn` block, default OFF).**

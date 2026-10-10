@@ -37,8 +37,8 @@ register yourself as a contact, or handle an inbound `[session-message]`.
 session_message { "action": "list" }
 → { "ok": true, "count": 3, "sessions": [ { "id": "session-…", "status": "idle" }, … ] }
 
-session_message { "action": "send", "target": "session-…", "message": "…" }
-→ { "ok": true, "from": "session-…", "to": "session-…", "delivery": "context+wake-steer", … }
+session_message { "action": "send", "target": "advisor", "message": "…" }
+→ { "ok": true, "from": "session-…", "to": "session-…", "delivery": "wake-steer", … }
 ```
 
 - Discover targets with `list`, or better, `contacts` (below).

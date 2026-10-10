@@ -1,11 +1,10 @@
-# dsh-agents-in-the-loop — live configuration (npm name; repo keeps agents-in-the-loop)
-# Cross-session call center: session_message + contacts.
-# UI intentionally removed in v1.3.0 (host functionality only).
-# SECURITY: gitignored — local session ids, never commit.
+# dsh-agents-in-the-loop — published bundle defaults.
+# Messaging, MCP inboxes, and workspace identities with a web panel.
+# This file ships in the package; never add local secrets or session ids.
 # NOTE: this file ships the PUBLISHED-SAFE defaults (everything off).
 # TESTING values (enabled: true, real paths, allTools: true) belong ONLY
 # in the live root overlay ~/.dsh/profiles/web/cordis.patch.yml, which
-# overrides this file on conflict.
+# is applied by the installed DSH loader. Verify effective config after reload.
 
 - insert:
     - id: dsh-agents-in-the-loop
