@@ -3,6 +3,10 @@
 ## v1.11.1 — release candidate (2026-10-10, not published)
 
 ### Fixed
+- `contacts.call` now routes session-backed identity and legacy external replies
+  into the inbox, instead of waking the hidden session. It rejects empty/self
+  sends and refuses external delivery when the inbox is disabled. Regression
+  coverage now includes all five reply paths, with no hidden-session delivery.
 - Contact editor rename and clearing workspace/label/tags/note; workspace choices
   now persist through the API and arbitrary unregistered paths are rejected.
 - Legacy external contact input validation matches the server's bounded ID format.

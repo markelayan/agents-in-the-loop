@@ -171,6 +171,7 @@ test('runtime enablement, live provisioning policy and all reply paths work with
   assert.equal(rawTarget.ok, false)
   assert.match(rawTarget.error, /Raw session-id targets are disabled/)
   const senders = [
+    () => callTool('contacts', { action: 'call', name: 'codex', message: 'contacts reply' }, 'maintainer'),
     () => callTool('session_message', { action: 'send', target: 'codex', message: 'tool reply' }, 'maintainer'),
     () => callTool('inbox', { action: 'send', target: 'codex', message: 'inbox reply' }, 'maintainer'),
     async () => (await route('/api/agents-in-the-loop/inbox?format=json&op=send', 'POST', { target: 'codex', message: 'panel reply' })).body,
@@ -180,15 +181,15 @@ test('runtime enablement, live provisioning policy and all reply paths work with
   assert.equal(directDeliveries, 0, 'replies must not wake the hidden identity session')
   const polled = await callTool('inbox', { action: 'poll' }, sid)
   assert.equal(polled.ok, true)
-  assert.equal(polled.messages.length, 4)
+  assert.equal(polled.messages.length, 5)
   const id = polled.messages[0].id
-  assert.equal((await callTool('inbox', { action: 'peek', id }, sid)).message.body, 'tool reply')
+  assert.equal((await callTool('inbox', { action: 'peek', id }, sid)).message.body, 'contacts reply')
   assert.equal((await callTool('inbox', { action: 'ack', id }, second.body.sessionId)).ok, false)
   assert.equal((await callTool('inbox', { action: 'ack', id }, sid)).ok, true)
   assert.equal((await callTool('inbox', { action: 'poll' }, 'session-local')).ok, false)
   const panel = await route('/api/agents-in-the-loop/inbox?format=json&identity=codex')
   assert.equal(panel.body.externals.some((x) => x.sessionId === sid), true)
-  assert.equal(panel.body.messages.length, 4)
+  assert.equal(panel.body.messages.length, 5)
   assert.equal((await route('/api/agents-in-the-loop/inbox?format=json&op=ack', 'POST', { identity: 'codex', id: polled.messages[1].id })).body.ok, true)
   const reprovisioned = await route(identitiesPath, 'PUT', { name: 'codex' })
   assert.equal(reprovisioned.status, 200, JSON.stringify(reprovisioned.body))
